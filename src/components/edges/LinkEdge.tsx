@@ -481,11 +481,12 @@ const IfLabel: React.FC<{
       style={{
         position: 'absolute',
         transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`,
-        fontSize: '9px',
+        // em (não px): acompanha a opção "Escala da fonte" do painel (TV de NOC)
+        fontSize: '0.65em',
         color,
         fontFamily: 'monospace',
         background: 'rgba(15, 23, 42, 0.95)',
-        padding: '3px 6px',
+        padding: '0.35em 0.65em',
         borderRadius: 4,
         pointerEvents: 'all', // Permitir clique
         whiteSpace: 'nowrap',
@@ -502,7 +503,7 @@ const IfLabel: React.FC<{
       <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontWeight: 'bold' }}>
         <span>{text}</span>
         {!!errors && errors > 0 && (
-          <span title={`${errors} erros na interface`} style={{ cursor: 'help', fontSize: '11px' }}>⚠️</span>
+          <span title={`${errors} erros na interface`} style={{ cursor: 'help', fontSize: '1.2em' }}>⚠️</span>
         )}
       </div>
       {ip && (
@@ -511,7 +512,7 @@ const IfLabel: React.FC<{
           title="Clique para copiar o IP"
           style={{
             color: copied ? '#4ade80' : '#22d3ee',
-            fontSize: '8px',
+            fontSize: '0.9em',
             marginTop: 2,
             cursor: 'pointer',
             background: copied ? 'rgba(74, 222, 128, 0.1)' : 'transparent',
@@ -524,7 +525,7 @@ const IfLabel: React.FC<{
         </span>
       )}
       {showTraffic && (tx !== undefined || rx !== undefined) && (
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 3, paddingTop: 3, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '8.5px', width: '100%' }}>
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 3, paddingTop: 3, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.95em', width: '100%' }}>
           <div style={{ color: '#22c55e', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
             <span>↑</span> <span>{formatBitsPerSec(tx)}</span>
           </div>
@@ -532,12 +533,12 @@ const IfLabel: React.FC<{
             <span>↓</span> <span>{formatBitsPerSec(rx)}</span>
           </div>
           {(footer === 'speed' || footer === 'both') && speed !== undefined && (
-            <div style={{ color: '#94a3b8', fontSize: '7.5px', borderTop: '1px dashed rgba(255,255,255,0.05)', marginTop: 2, paddingTop: 2, textAlign: 'center' }}>
+            <div style={{ color: '#94a3b8', fontSize: '0.88em', borderTop: '1px dashed rgba(255,255,255,0.05)', marginTop: 2, paddingTop: 2, textAlign: 'center' }}>
               {formatBitsPerSec(speed)}
             </div>
           )}
           {(footer === 'fiber' || footer === 'both') && (domTx !== undefined || domRx !== undefined) && (
-            <div style={{ borderTop: '1px dashed rgba(255,255,255,0.05)', marginTop: 2, paddingTop: 2, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '8px' }}>
+            <div style={{ borderTop: '1px dashed rgba(255,255,255,0.05)', marginTop: 2, paddingTop: 2, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.94em' }}>
               <div style={{ color: '#4ade80', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
                 <span>Tx</span> <span>{domTx !== undefined ? `${domTx.toFixed(2)} dBm` : '—'}</span>
               </div>

@@ -13,6 +13,9 @@ interface Props extends NodeProps {
 
 export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
   const { label, ip, deviceType, status, customIcon, color, iconSize, searchQuery, nodeWidth, nodeHeight, borderRadius, bgColor, linkUrl } = data as any;
+  // Escala da fonte do painel (opção "Escala da fonte" p/ TV de NOC):
+  // textos escalam via em; ícone e badge usam px e precisam multiplicar.
+  const fontScale = (data as any).fontScale ?? 1;
   const { editMode, setNodeData } = useEditor();
 
   // Tamanho "ao vivo" durante o resize: atualiza só o estado local (visual).
@@ -121,15 +124,15 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
       )}
 
       <div style={{ position: 'relative', lineHeight: 0 }}>
-        {getDeviceIcon(deviceType, { size: iconSize ?? 56, status, color, customIcon })}
+        {getDeviceIcon(deviceType, { size: Math.round((iconSize ?? 56) * fontScale), status, color, customIcon })}
         {status && status !== 'unknown' && (
           <span
             style={{
               position: 'absolute',
               bottom: 0,
               right: 0,
-              width: 12,
-              height: 12,
+              width: Math.round(12 * fontScale),
+              height: Math.round(12 * fontScale),
               borderRadius: '50%',
               background:
                 color ? color :

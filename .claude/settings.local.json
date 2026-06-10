@@ -14,7 +14,8 @@
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: binding casa substring literal antes de regex *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: dropdown customizado de series nos bindings \\(SeriesCombo\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: trafego global cai pros bindings por lado \\(tooltip/util mostravam '\\\\''-'\\\\''\\) *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: sugestoes de binding incluem series de texto *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: sugestoes de binding incluem series de texto *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: '\\\\''Escala da fonte'\\\\'' agora escala os cards de interface e os icones dos nos *)"
     ]
   }
 }

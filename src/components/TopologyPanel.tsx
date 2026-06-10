@@ -228,10 +228,11 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         id: n.id,
         type: 'device',
         position: n.position,
-        data: { ...n.data, status, color, searchQuery } as any,
+        // fontScale injetado: o DeviceNode usa pra escalar ícone e badge (px fixos)
+        data: { ...n.data, status, color, searchQuery, fontScale: options.fontScale ?? 1 } as any,
       };
     }),
-    [topology, series, searchQuery]
+    [topology, series, searchQuery, options.fontScale]
   );
 
   // Arestas: aplica binding de up/down/speed e IP das séries
