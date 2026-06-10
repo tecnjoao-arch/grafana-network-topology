@@ -6,7 +6,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { EdgeProps, EdgeLabelRenderer, useInternalNode, useReactFlow, getBezierPath, getSmoothStepPath, Position } from '@xyflow/react';
-import { LinkEdgeData } from '../../types';
+import { LinkEdgeData, LabelFooter } from '../../types';
 import { formatBitsPerSec, linkUtilization } from '../../utils/format';
 import { getEdgeParams } from '../../utils/floatingEdge';
 import { useEditor } from '../EditorContext';
@@ -398,6 +398,9 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             tx={data.sourceTrafficUp}
             rx={data.sourceTrafficDown}
             speed={data.linkSpeed}
+            domTx={data.sourceDomTxPower}
+            domRx={data.sourceDomRxPower}
+            footer={data.labelFooter ?? 'speed'}
             x={srcLabelPos.x}
             y={srcLabelPos.y}
             color={color}
@@ -412,6 +415,9 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             tx={data.targetTrafficUp}
             rx={data.targetTrafficDown}
             speed={data.linkSpeed}
+            domTx={data.targetDomTxPower}
+            domRx={data.targetDomRxPower}
+            footer={data.labelFooter ?? 'speed'}
             x={tgtLabelPos.x}
             y={tgtLabelPos.y}
             color={color}
@@ -452,11 +458,16 @@ const IfLabel: React.FC<{
   tx?: number;
   rx?: number;
   speed?: number;
+  /** Potência óptica DOM do lado deste card (dBm) */
+  domTx?: number;
+  domRx?: number;
+  /** O que mostrar no rodapé do card */
+  footer?: LabelFooter;
   x: number;
   y: number;
   color: string;
   showTraffic: boolean;
-}> = ({ text, ip, errors, tx, rx, speed, x, y, color, showTraffic }) => {
+}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic }) => {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     if (!ip) return;
@@ -520,9 +531,19 @@ const IfLabel: React.FC<{
           <div style={{ color: '#3b82f6', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
             <span>↓</span> <span>{formatBitsPerSec(rx)}</span>
           </div>
-          {speed !== undefined && (
+          {(footer === 'speed' || footer === 'both') && speed !== undefined && (
             <div style={{ color: '#94a3b8', fontSize: '7.5px', borderTop: '1px dashed rgba(255,255,255,0.05)', marginTop: 2, paddingTop: 2, textAlign: 'center' }}>
               {formatBitsPerSec(speed)}
+            </div>
+          )}
+          {(footer === 'fiber' || footer === 'both') && (domTx !== undefined || domRx !== undefined) && (
+            <div style={{ borderTop: '1px dashed rgba(255,255,255,0.05)', marginTop: 2, paddingTop: 2, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '8px' }}>
+              <div style={{ color: '#4ade80', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+                <span>Tx</span> <span>{domTx !== undefined ? `${domTx.toFixed(2)} dBm` : '—'}</span>
+              </div>
+              <div style={{ color: '#60a5fa', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+                <span>Rx</span> <span>{domRx !== undefined ? `${domRx.toFixed(2)} dBm` : '—'}</span>
+              </div>
             </div>
           )}
         </div>

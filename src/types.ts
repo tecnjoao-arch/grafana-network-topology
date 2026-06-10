@@ -54,6 +54,10 @@ export const LINE_STYLES: LineStyle[] = ['solid', 'dashed', 'dotted', 'double'];
 export const LINE_ANIMATIONS: LineAnimation[] = ['none', 'flow', 'reverse', 'pulse', 'glow'];
 export const PATH_TYPES: PathType[] = ['straight', 'curved', 'step'];
 
+/** Conteúdo do rodapé do card de interface (linha abaixo do tráfego ↑/↓) */
+export type LabelFooter = 'speed' | 'fiber' | 'both' | 'none';
+export const LABEL_FOOTERS: LabelFooter[] = ['speed', 'fiber', 'both', 'none'];
+
 /** Um equipamento no diagrama (nó) */
 export interface DeviceNodeData {
   label: string;
@@ -99,6 +103,8 @@ export interface LinkEdgeData {
   targetInterface?: string;
   /** Mostrar caixa de tráfego sobre a aresta? */
   showTrafficBox?: boolean;
+  /** Rodapé do card de interface: velocidade (padrão), potência da fibra, ambos ou nada */
+  labelFooter?: LabelFooter;
   /** Tráfego de upload em bps */
   trafficUp?: number;
   /** Tráfego de download em bps */

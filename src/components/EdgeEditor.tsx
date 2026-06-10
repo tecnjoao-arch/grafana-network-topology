@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { LinkEdgeData, LineStyle, LineAnimation, LINE_STYLES, LINE_ANIMATIONS, PathType, PATH_TYPES } from '../types';
+import { LinkEdgeData, LineStyle, LineAnimation, LINE_STYLES, LINE_ANIMATIONS, PathType, PATH_TYPES, LabelFooter, LABEL_FOOTERS } from '../types';
 import { MetricBinding, Aggregation } from '../utils/dataBinding';
 
 interface Props {
@@ -38,6 +38,12 @@ const PATH_LABEL: Record<PathType, string> = {
   straight: 'Reta',
   curved: 'Curva (Draw.io)',
   step: 'Ortogonal (Grau 90)',
+};
+const FOOTER_LABEL: Record<LabelFooter, string> = {
+  speed: 'Velocidade',
+  fiber: 'Fibra (Tx/Rx)',
+  both: 'Ambos',
+  none: 'Nenhum',
 };
 
 export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, seriesKeys, onChange, onDelete, onClose }) => {
@@ -325,6 +331,20 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
           />
           Mostrar caixa de tráfego
         </label>
+
+        {/* Rodapé do card: velocidade, potência da fibra, ambos ou nada */}
+        <Section title="Rodapé do card (abaixo do ↑/↓)">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {LABEL_FOOTERS.map((f) => (
+              <Chip key={f} active={(data.labelFooter ?? 'speed') === f} onClick={() => onChange({ labelFooter: f })}>
+                {FOOTER_LABEL[f]}
+              </Chip>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: '#64748b', marginTop: 6 }}>
+            "Fibra" usa os bindings de Potência Tx/Rx DOM de cada lado (seção 🧬 abaixo).
+          </div>
+        </Section>
 
         {/* Thresholds (Flowcharting style) */}
         <Section title="Thresholds da Linha (Flowcharting)">
