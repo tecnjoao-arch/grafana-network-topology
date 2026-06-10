@@ -299,8 +299,11 @@ export const TopologyPanel: React.FC<Props> = (props) => {
 
       const liveData: LinkEdgeData = {
         ...e.data,
-        trafficUp: up ?? e.data.trafficUp,
-        trafficDown: down ?? e.data.trafficDown,
+        // Tráfego "global" do link (tooltip, modal, utilização→cor/espessura):
+        // sem binding global, usa o lado resolvido (A→B = upload da origem
+        // = download do destino).
+        trafficUp: up ?? e.data.trafficUp ?? srcUp ?? tgtDown,
+        trafficDown: down ?? e.data.trafficDown ?? srcDown ?? tgtUp,
         sourceTrafficUp: sourceUp,
         sourceTrafficDown: sourceDown,
         targetTrafficUp: targetUp,
