@@ -93,10 +93,14 @@ export function resolveBinding(series: DataFrame[], binding?: MetricBinding): nu
   try {
     re = new RegExp(binding.match, 'i');
   } catch {
-    re = null; // match inválido como regex → cai pra substring
+    re = null; // match inválido como regex → só substring
   }
+  // Substring literal PRIMEIRO, regex como fallback: nomes de itens do Zabbix
+  // costumam conter parênteses (ex: "Rx Power (dBm)"), que como regex viram
+  // grupos e nunca casam. Assim, colar o nome exato da série sempre funciona.
+  const lowerMatch = binding.match.toLowerCase();
   const matches = (h: string) =>
-    re ? re.test(h) : h.toLowerCase().includes(binding.match.toLowerCase());
+    h.toLowerCase().includes(lowerMatch) || (re ? re.test(h) : false);
 
   const agg = binding.aggregation ?? 'last';
   const globalMaxTime = getGlobalMaxTime(series);
@@ -152,8 +156,10 @@ export function resolveTextBinding(series: DataFrame[], binding?: MetricBinding)
   } catch {
     re = null;
   }
+  // Mesma regra do resolveBinding: literal primeiro, regex como fallback.
+  const lowerMatch = binding.match.toLowerCase();
   const matches = (h: string) =>
-    re ? re.test(h) : h.toLowerCase().includes(binding.match.toLowerCase());
+    h.toLowerCase().includes(lowerMatch) || (re ? re.test(h) : false);
 
   for (const frame of series) {
     if (binding.query && (frame.refId ?? '') !== binding.query) continue;
