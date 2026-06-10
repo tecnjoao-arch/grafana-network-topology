@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(git -C \"C:\\\\Users\\\\joaomarcos\\\\Desktop\\\\teste_grafana\\\\grafana-network-topology\" log --oneline -5)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(echo \"=== TSC EXIT $? ===\")",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: type-safety + perf + copy-paste + staleness *)"
     ]
   }
 }

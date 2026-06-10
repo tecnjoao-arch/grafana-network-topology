@@ -6,7 +6,7 @@ import { PanelProps } from '@grafana/data';
 import {
   ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, MiniMap,
   useNodesState, useEdgesState, useReactFlow,
-  Node, Edge, NodeChange, Connection,
+  Node, Edge, NodeChange, Connection, OnConnectStart,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -387,7 +387,7 @@ const TopologyInner: React.FC<InnerProps> = ({
     return () => window.removeEventListener('mousemove', handleMove);
   }, []);
 
-  const clipboard = useRef<Array<{ data: any; width?: number; height?: number }>>([]);
+  const clipboard = useRef<Array<{ data: any; width?: number; height?: number; position?: { x: number; y: number } }>>([]);
 
   useEffect(() => {
     if (!options.editMode) return;
@@ -405,7 +405,8 @@ const TopologyInner: React.FC<InnerProps> = ({
           clipboard.current = selected.map(n => ({
             data: JSON.parse(JSON.stringify(n.data)),
             width: n.measured?.width || (n.data as any)?.nodeWidth,
-            height: n.measured?.height || (n.data as any)?.nodeHeight
+            height: n.measured?.height || (n.data as any)?.nodeHeight,
+            position: { x: n.position.x, y: n.position.y },
           }));
         }
       }
@@ -414,14 +415,14 @@ const TopologyInner: React.FC<InnerProps> = ({
         if (clipboard.current.length > 0 && onOptionsChange) {
           e.preventDefault();
           const offset = 35;
+          // Desloca o grupo inteiro por `offset`, preservando o layout relativo
+          // entre os nós copiados (em vez de empilhar tudo na mesma diagonal).
           const newNodes = clipboard.current.map((clip, idx) => {
             const id = `node-${Date.now()}-${idx}`;
-            const originalNode = nodes.find(n => n.selected);
-            const posX = (originalNode?.position.x ?? 100) + offset;
-            const posY = (originalNode?.position.y ?? 100) + offset;
+            const base = clip.position ?? { x: 100, y: 100 };
             return {
               id,
-              position: { x: posX + (idx * 20), y: posY + (idx * 20) },
+              position: { x: base.x + offset, y: base.y + offset },
               data: {
                 ...clip.data,
                 nodeWidth: clip.width,
@@ -560,10 +561,10 @@ const TopologyInner: React.FC<InnerProps> = ({
 
   const { screenToFlowPosition, getNode } = useReactFlow();
 
-  const handleConnectStart = useCallback((event: React.MouseEvent | React.TouchEvent) => {
+  const handleConnectStart = useCallback<OnConnectStart>((event) => {
     if ('clientX' in event) {
       startMousePos.current = { x: event.clientX, y: event.clientY };
-    } else if (event.touches) {
+    } else if ('touches' in event && event.touches.length) {
       startMousePos.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
     }
   }, []);

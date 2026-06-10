@@ -87,6 +87,8 @@ export interface DeviceNodeData {
   borderRadius?: number;
   /** Cor de fundo customizada do container */
   bgColor?: string;
+  /** Exigido pelo React Flow v12: o data de um Node precisa satisfazer Record<string, unknown> */
+  [key: string]: unknown;
 }
 
 /** Uma conexão entre dois equipamentos (aresta) */
@@ -197,6 +199,8 @@ export interface LinkEdgeData {
   searchQuery?: string;
   /** Ocultar cards de tráfego injetado via sidebar */
   hideTrafficBox?: boolean;
+  /** Exigido pelo React Flow v12: o data de um Edge precisa satisfazer Record<string, unknown> */
+  [key: string]: unknown;
 }
 
 /** Topologia completa serializada nas options do painel */

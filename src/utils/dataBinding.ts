@@ -53,7 +53,14 @@ export function listSeriesKeys(series: DataFrame[]): string[] {
   return Array.from(keys);
 }
 
+// Cache do maior timestamp por referência do array de séries. Cada render do
+// painel resolve dezenas de bindings sobre o MESMO `series`; sem cache, cada
+// um re-escaneava todos os campos de tempo (O(séries × pontos × bindings)).
+const maxTimeCache = new WeakMap<DataFrame[], number>();
+
 function getGlobalMaxTime(series: DataFrame[]): number {
+  const cached = maxTimeCache.get(series);
+  if (cached !== undefined) return cached;
   let maxTime = 0;
   for (const frame of series) {
     const timeField = frame.fields.find((f) => f.type === 'time');
@@ -67,6 +74,7 @@ function getGlobalMaxTime(series: DataFrame[]): number {
       }
     }
   }
+  maxTimeCache.set(series, maxTime);
   return maxTime;
 }
 
@@ -94,9 +102,11 @@ export function resolveBinding(series: DataFrame[], binding?: MetricBinding): nu
       
       const vals = (field.values as unknown as any[]).map((x) => Number(x));
       
-      // Checar se o dado está obsoleto (stale) comparando com o timestamp máximo global
+      // Checar se o dado está obsoleto (stale) comparando com o timestamp máximo global.
+      // Só se aplica a 'last' (valor "agora"); agregações de janela (avg/max/min/first)
+      // continuam válidas mesmo que o último ponto seja antigo.
       const timeField = frame.fields.find((f) => f.type === 'time');
-      if (timeField && globalMaxTime > 0) {
+      if (agg === 'last' && timeField && globalMaxTime > 0) {
         const timeVals = timeField.values as unknown as any[];
         let lastIdx = -1;
         for (let i = vals.length - 1; i >= 0; i--) {
