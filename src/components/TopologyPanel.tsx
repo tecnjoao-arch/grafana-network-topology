@@ -10,7 +10,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { PanelOptions, EXAMPLE_TOPOLOGY, NetworkTopology, LinkEdgeData, DEFAULT_OPTIONS } from '../types';
+import { PanelOptions, NetworkTopology, LinkEdgeData, DEFAULT_OPTIONS } from '../types';
 import { DeviceNode } from './nodes/DeviceNode';
 import { LinkEdge } from './edges/LinkEdge';
 import { LinkTooltip } from './LinkTooltip';
@@ -174,12 +174,8 @@ export const TopologyPanel: React.FC<Props> = (props) => {
   // Aplica o limite de obsolescência configurado antes de resolver os bindings.
   setStaleThresholdMs((options.staleThresholdSec ?? DEFAULT_OPTIONS.staleThresholdSec) * 1000);
 
-  // Topologia REAL (editável) — pode estar vazia. O exemplo aparece apenas como
-  // demonstração visual quando vazio E fora do modo edição; assim a edição nunca
-  // grava os nós de demonstração nas options do painel.
-  const realTopology = options.topology ?? DEFAULT_OPTIONS.topology;
-  const isEmpty = !realTopology.nodes?.length;
-  const topology = isEmpty && !options.editMode ? EXAMPLE_TOPOLOGY : realTopology;
+  // Topologia real (editável) — pode estar vazia; nenhum exemplo é injetado.
+  const topology = options.topology ?? DEFAULT_OPTIONS.topology;
   const series = data?.series ?? [];
 
   const [showIp, setShowIp] = useState(false);
@@ -766,7 +762,7 @@ const TopologyInner: React.FC<InnerProps> = ({
           />
         )}
         {options.editMode && <EditModeBanner onAddNode={addNode} />}
-        {options.editMode && topology.nodes.length === 0 && (
+        {topology.nodes.length === 0 && (
           <div style={{
             position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             background: 'rgba(15, 23, 42, 0.9)', padding: '24px 40px', borderRadius: 12,
@@ -774,7 +770,11 @@ const TopologyInner: React.FC<InnerProps> = ({
             pointerEvents: 'none',
           }}>
             <h2 style={{ margin: '0 0 8px 0', color: '#f59e0b' }}>Topologia Vazia</h2>
-            <p style={{ margin: 0 }}>Clique em <b>"Adicionar Equipamento"</b> no banner<br/>acima para começar a montar o mapa.</p>
+            {options.editMode ? (
+              <p style={{ margin: 0 }}>Clique em <b>"Adicionar Equipamento"</b> no banner<br/>acima para começar a montar o mapa.</p>
+            ) : (
+              <p style={{ margin: 0 }}>Ative o <b>Modo Edição</b> nas opções do painel<br/>e clique em "Adicionar Equipamento".</p>
+            )}
           </div>
         )}
         {options.showLegend && <Legend />}
