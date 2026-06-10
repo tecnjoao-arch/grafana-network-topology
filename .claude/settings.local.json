@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"C:\\\\Users\\\\joaomarcos\\\\Desktop\\\\teste_grafana\\\\grafana-network-topology\" log --oneline -5)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

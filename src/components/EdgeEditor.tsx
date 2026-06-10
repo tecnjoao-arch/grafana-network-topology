@@ -1,0 +1,699 @@
+// components/EdgeEditor.tsx — Painel de edição da aresta selecionada.
+// Cor, traçado, animação, espessura e nomes de interface. Portal p/ document.body.
+
+import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
+import { LinkEdgeData, LineStyle, LineAnimation, LINE_STYLES, LINE_ANIMATIONS, PathType, PATH_TYPES } from '../types';
+import { MetricBinding, Aggregation } from '../utils/dataBinding';
+
+interface Props {
+  edgeId: string;
+  data: LinkEdgeData;
+  sourceLabel: string;
+  targetLabel: string;
+  seriesKeys: string[];
+  onChange: (patch: Partial<LinkEdgeData>) => void;
+  onDelete: () => void;
+  onClose: () => void;
+}
+
+const AGGS: Aggregation[] = ['last', 'avg', 'max', 'min', 'first'];
+
+const PRESET_COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#22d3ee', '#3b82f6', '#a855f7', '#ec4899', '#94a3b8', '#ffffff'];
+
+const STYLE_LABEL: Record<LineStyle, string> = {
+  solid: 'Sólida',
+  dashed: 'Tracejada',
+  dotted: 'Pontilhada',
+  double: 'Dupla',
+};
+const ANIM_LABEL: Record<LineAnimation, string> = {
+  none: 'Nenhuma',
+  flow: 'Fluxo →',
+  reverse: 'Fluxo ←',
+  pulse: 'Pulsar',
+  glow: 'Brilho',
+};
+const PATH_LABEL: Record<PathType, string> = {
+  straight: 'Reta',
+  curved: 'Curva (Draw.io)',
+  step: 'Ortogonal (Grau 90)',
+};
+
+export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, seriesKeys, onChange, onDelete, onClose }) => {
+  const color = data.color ?? '#22c55e';
+  const [showSeries, setShowSeries] = useState(false);
+
+  const patchBinding = (
+    key:
+      | 'trafficUpBinding'
+      | 'trafficDownBinding'
+      | 'sourceTrafficUpBinding'
+      | 'sourceTrafficDownBinding'
+      | 'targetTrafficUpBinding'
+      | 'targetTrafficDownBinding'
+      | 'speedBinding'
+      | 'sourceIpBinding'
+      | 'targetIpBinding'
+      | 'sourceErrorBinding'
+      | 'targetErrorBinding'
+      | 'statusBinding'
+      | 'sourceDomTempBinding'
+      | 'sourceDomVoltBinding'
+      | 'sourceDomBiasBinding'
+      | 'sourceDomTxPowerBinding'
+      | 'sourceDomRxPowerBinding'
+      | 'targetDomTempBinding'
+      | 'targetDomVoltBinding'
+      | 'targetDomBiasBinding'
+      | 'targetDomTxPowerBinding'
+      | 'targetDomRxPowerBinding',
+    patch: Partial<MetricBinding>
+  ) => {
+    const cur: MetricBinding = (data as any)[key] ?? { match: '', aggregation: 'last' };
+    const next = { ...cur, ...patch };
+    onChange({ [key]: next.match ? next : undefined } as any);
+  };
+
+  const sourceX = data.sourceAnchor ? Math.round(data.sourceAnchor.x * 100) : 50;
+  const sourceY = data.sourceAnchor ? Math.round(data.sourceAnchor.y * 100) : 50;
+  const targetX = data.targetAnchor ? Math.round(data.targetAnchor.x * 100) : 50;
+  const targetY = data.targetAnchor ? Math.round(data.targetAnchor.y * 100) : 50;
+
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        top: 70,
+        right: 20,
+        width: 290,
+        maxHeight: 'calc(100vh - 90px)',
+        overflowY: 'auto',
+        background: '#0f172a',
+        border: '1px solid #334155',
+        borderRadius: 8,
+        color: '#e2e8f0',
+        zIndex: 10000,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
+        fontSize: 13,
+      }}
+    >
+      <div
+        style={{
+          padding: '10px 14px',
+          borderBottom: '1px solid #334155',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: 'linear-gradient(180deg,#1e293b,#0f172a)',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 11, color: '#94a3b8' }}>Editar link</div>
+          <div style={{ fontWeight: 600 }}>{sourceLabel} ↔ {targetLabel}</div>
+        </div>
+        <button onClick={onClose} style={btnClose}>✕</button>
+      </div>
+
+      <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Cor */}
+        <Section title="Cor da linha">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            {PRESET_COLORS.map((c) => (
+              <button
+                key={c}
+                onClick={() => onChange({ color: c })}
+                style={{
+                  width: 24, height: 24, borderRadius: 4, cursor: 'pointer',
+                  background: c,
+                  border: color === c ? '2px solid #fff' : '1px solid #334155',
+                }}
+              />
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="color"
+              value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : '#22c55e'}
+              onChange={(e) => onChange({ color: e.target.value })}
+              style={{ width: 38, height: 28, padding: 0, border: '1px solid #334155', borderRadius: 4, background: 'transparent', cursor: 'pointer' }}
+            />
+            <input
+              type="text"
+              value={color}
+              onChange={(e) => onChange({ color: e.target.value })}
+              style={inputText}
+            />
+            <button onClick={() => onChange({ color: undefined })} title="Voltar à cor automática (status)" style={btnReset}>auto</button>
+          </div>
+        </Section>
+
+        {/* Traçado */}
+        <Section title="Traçado">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {LINE_STYLES.map((s) => (
+              <Chip key={s} active={(data.lineStyle ?? 'solid') === s} onClick={() => onChange({ lineStyle: s })}>
+                {STYLE_LABEL[s]}
+              </Chip>
+            ))}
+          </div>
+        </Section>
+
+        {/* Formato / Roteamento */}
+        <Section title="Formato (Roteamento)">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
+            {PATH_TYPES.map((pt) => (
+              <Chip key={pt} active={(data.pathType ?? 'straight') === pt} onClick={() => onChange({ pathType: pt })}>
+                {PATH_LABEL[pt]}
+              </Chip>
+            ))}
+          </div>
+          {(data.pathType === 'step') && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, color: '#94a3b8', marginTop: 6 }}>
+              <input
+                type="checkbox"
+                checked={!!data.flipBends}
+                onChange={(e) => onChange({ flipBends: e.target.checked })}
+              />
+              Inverter Curvas Ortogonais (90°)
+            </label>
+          )}
+        </Section>
+
+        {/* Animação */}
+        <Section title="Animação">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {LINE_ANIMATIONS.map((a) => (
+              <Chip key={a} active={(data.animation ?? 'none') === a} onClick={() => onChange({ animation: a })}>
+                {ANIM_LABEL[a]}
+              </Chip>
+            ))}
+          </div>
+        </Section>
+
+        {/* Espessura */}
+        <Section title={`Espessura: ${data.lineWidth ?? 'auto'}`}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="range"
+              min={1}
+              max={14}
+              step={1}
+              value={data.lineWidth ?? 4}
+              onChange={(e) => onChange({ lineWidth: Number(e.target.value) })}
+              style={{ flex: 1 }}
+            />
+            <button onClick={() => onChange({ lineWidth: undefined })} title="Espessura automática (por uso)" style={btnReset}>auto</button>
+          </div>
+        </Section>
+
+        {/* Posicionamento dos Cabos (Âncoras) */}
+        <Section title="Âncoras dos Cabos (Manual)">
+          <div style={{ background: '#0b1220', padding: 8, borderRadius: 6, border: '1px solid #1e293b', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>Origem ({sourceLabel})</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <span style={{ fontSize: 10, color: '#64748b', width: 12 }}>X:</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={sourceX}
+                  onChange={(e) => {
+                    const x = Number(e.target.value) / 100;
+                    onChange({ sourceAnchor: { x, y: sourceY / 100 } });
+                  }}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontSize: 10, width: 26, textAlign: 'right' }}>{sourceX}%</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 10, color: '#64748b', width: 12 }}>Y:</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={sourceY}
+                  onChange={(e) => {
+                    const y = Number(e.target.value) / 100;
+                    onChange({ sourceAnchor: { x: sourceX / 100, y } });
+                  }}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontSize: 10, width: 26, textAlign: 'right' }}>{sourceY}%</span>
+              </div>
+              {data.sourceAnchor && (
+                <button
+                  onClick={() => onChange({ sourceAnchor: undefined })}
+                  style={{ ...btnReset, marginTop: 6, padding: '2px 6px', fontSize: 10 }}
+                >
+                  Resetar Origem p/ Auto
+                </button>
+              )}
+            </div>
+
+            <div style={{ borderTop: '1px solid #1e293b', paddingTop: 6, marginTop: 4 }}>
+              <div style={{ fontWeight: 600, fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>Destino ({targetLabel})</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <span style={{ fontSize: 10, color: '#64748b', width: 12 }}>X:</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={targetX}
+                  onChange={(e) => {
+                    const x = Number(e.target.value) / 100;
+                    onChange({ targetAnchor: { x, y: targetY / 100 } });
+                  }}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontSize: 10, width: 26, textAlign: 'right' }}>{targetX}%</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 10, color: '#64748b', width: 12 }}>Y:</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={targetY}
+                  onChange={(e) => {
+                    const y = Number(e.target.value) / 100;
+                    onChange({ targetAnchor: { x: targetX / 100, y } });
+                  }}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontSize: 10, width: 26, textAlign: 'right' }}>{targetY}%</span>
+              </div>
+              {data.targetAnchor && (
+                <button
+                  onClick={() => onChange({ targetAnchor: undefined })}
+                  style={{ ...btnReset, marginTop: 6, padding: '2px 6px', fontSize: 10 }}
+                >
+                  Resetar Destino p/ Auto
+                </button>
+              )}
+            </div>
+          </div>
+        </Section>
+
+        {/* Interfaces */}
+        <Section title="Interfaces">
+          <input
+            type="text"
+            placeholder="Interface origem (ex: Te0/0/0/1)"
+            value={data.sourceInterface ?? ''}
+            onChange={(e) => onChange({ sourceInterface: e.target.value })}
+            style={{ ...inputText, width: '100%', marginBottom: 6 }}
+          />
+          <input
+            type="text"
+            placeholder="Interface destino"
+            value={data.targetInterface ?? ''}
+            onChange={(e) => onChange({ targetInterface: e.target.value })}
+            style={{ ...inputText, width: '100%' }}
+          />
+        </Section>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={!!data.showTrafficBox}
+            onChange={(e) => onChange({ showTrafficBox: e.target.checked })}
+          />
+          Mostrar caixa de tráfego
+        </label>
+
+        {/* Thresholds (Flowcharting style) */}
+        <Section title="Thresholds da Linha (Flowcharting)">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: '#0b1220', padding: 8, borderRadius: 6, border: '1px solid #1e293b' }}>
+            <BindRow
+              label="Métrica de Status"
+              binding={data.statusBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('statusBinding', { match: m })}
+              onAgg={(a) => patchBinding('statusBinding', { aggregation: a })}
+            />
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {/* Cabeçalho da tabela de Thresholds */}
+              <div style={{ display: 'grid', gridTemplateColumns: '24px 1fr 34px 80px 24px', gap: 4, alignItems: 'center', fontSize: 10, color: '#64748b', fontWeight: 'bold', padding: '0 4px' }}>
+                <div>Rem</div>
+                <div>Valor Limite</div>
+                <div>Cor</div>
+                <div>Animação</div>
+                <div>Lvl</div>
+              </div>
+
+              {(data.colorMappings ?? []).map((mapping, idx) => (
+                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 34px 80px 24px', gap: 4, alignItems: 'center', background: '#1e293b', padding: 4, borderRadius: 4 }}>
+                  <button
+                    onClick={() => {
+                      const list = (data.colorMappings ?? []).filter((_, i) => i !== idx);
+                      onChange({ colorMappings: list });
+                    }}
+                    style={{ ...btnReset, borderColor: '#ef4444', color: '#ef4444', padding: '2px', textAlign: 'center', width: '100%', fontSize: 10 }}
+                  >
+                    ✕
+                  </button>
+                  <input
+                    type="text"
+                    placeholder="Valor"
+                    value={mapping.value}
+                    onChange={(e) => {
+                      const list = [...(data.colorMappings ?? [])];
+                      list[idx] = { ...list[idx], value: e.target.value };
+                      onChange({ colorMappings: list });
+                    }}
+                    style={{ ...inputText, width: '100%', padding: '3px 4px', fontSize: 11 }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <input
+                      type="color"
+                      value={mapping.color}
+                      onChange={(e) => {
+                        const list = [...(data.colorMappings ?? [])];
+                        list[idx] = { ...list[idx], color: e.target.value };
+                        onChange({ colorMappings: list });
+                      }}
+                      style={{ width: 20, height: 20, cursor: 'pointer', border: 'none', background: 'transparent', padding: 0 }}
+                    />
+                  </div>
+                  <select
+                    value={mapping.animation ?? 'none'}
+                    onChange={(e) => {
+                      const list = [...(data.colorMappings ?? [])];
+                      list[idx] = { ...list[idx], animation: e.target.value as any };
+                      onChange({ colorMappings: list });
+                    }}
+                    style={{ ...inputText, width: '100%', cursor: 'pointer', padding: '2px 4px', fontSize: 11 }}
+                  >
+                    {LINE_ANIMATIONS.map(anim => (
+                      <option key={anim} value={anim}>{ANIM_LABEL[anim]}</option>
+                    ))}
+                  </select>
+                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 11, color: '#3b82f6' }}>
+                    {idx}
+                  </div>
+                </div>
+              ))}
+              
+              <button
+                onClick={() => {
+                  const list = [...(data.colorMappings ?? []), { value: '', color: '#ef4444', animation: 'flow' as const }];
+                  onChange({ colorMappings: list });
+                }}
+                style={{ ...btnReset, width: '100%', borderStyle: 'dashed', background: 'transparent', color: '#3b82f6', borderColor: '#3b82f6', marginTop: 4 }}
+              >
+                ➕ Adicionar Regra
+              </button>
+            </div>
+          </div>
+        </Section>
+
+        {/* ── Binding de dados (Zabbix etc) ── */}
+        <div style={{ borderTop: '1px solid #334155', paddingTop: 12, marginTop: 2 }}>
+          <Section title="Dados ao vivo (binding)">
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+              Cole parte do nome da série (host/interface). Aceita regex.
+            </div>
+            
+            <div style={{ marginTop: 8, marginBottom: 4, fontSize: 11, color: '#3b82f6', fontWeight: 'bold' }}>
+              Lado A (Origem - {sourceLabel})
+            </div>
+            <BindRow
+              label="Upload (bps) [A → B]"
+              binding={data.sourceTrafficUpBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('sourceTrafficUpBinding', { match: m })}
+              onAgg={(a) => patchBinding('sourceTrafficUpBinding', { aggregation: a })}
+            />
+            <BindRow
+              label="Download (bps) [B → A]"
+              binding={data.sourceTrafficDownBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('sourceTrafficDownBinding', { match: m })}
+              onAgg={(a) => patchBinding('sourceTrafficDownBinding', { aggregation: a })}
+            />
+
+            <div style={{ marginTop: 12, marginBottom: 4, fontSize: 11, color: '#10b981', fontWeight: 'bold' }}>
+              Lado B (Destino - {targetLabel})
+            </div>
+            <BindRow
+              label="Upload (bps) [B → A]"
+              binding={data.targetTrafficUpBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('targetTrafficUpBinding', { match: m })}
+              onAgg={(a) => patchBinding('targetTrafficUpBinding', { aggregation: a })}
+            />
+            <BindRow
+              label="Download (bps) [A → B]"
+              binding={data.targetTrafficDownBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('targetTrafficDownBinding', { match: m })}
+              onAgg={(a) => patchBinding('targetTrafficDownBinding', { aggregation: a })}
+            />
+
+            <div style={{ borderTop: '1px solid #1e293b', marginTop: 12, paddingTop: 12 }}>
+              <BindRow
+                label="Capacidade Global (bps)"
+                binding={data.speedBinding}
+                seriesKeys={seriesKeys}
+                onMatch={(m) => patchBinding('speedBinding', { match: m })}
+                onAgg={(a) => patchBinding('speedBinding', { aggregation: a })}
+              />
+            </div>
+            
+            <div style={{ marginTop: 12, marginBottom: 8, fontSize: 11, color: '#64748b', fontWeight: 'bold' }}>
+              Endereços IP (Zabbix)
+            </div>
+            <BindRow
+              label={`IP Origem (${sourceLabel})`}
+              binding={data.sourceIpBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('sourceIpBinding', { match: m })}
+              onAgg={(a) => patchBinding('sourceIpBinding', { aggregation: a })}
+            />
+            <BindRow
+              label={`IP Destino (${targetLabel})`}
+              binding={data.targetIpBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('targetIpBinding', { match: m })}
+              onAgg={(a) => patchBinding('targetIpBinding', { aggregation: a })}
+            />
+            
+            <div style={{ marginTop: 12, marginBottom: 8, fontSize: 11, color: '#ef4444', fontWeight: 'bold' }}>
+              Métricas de Erros / Drops
+            </div>
+            <BindRow
+              label={`Erros Origem (${sourceLabel})`}
+              binding={data.sourceErrorBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('sourceErrorBinding', { match: m })}
+              onAgg={(a) => patchBinding('sourceErrorBinding', { aggregation: a })}
+            />
+            <BindRow
+              label={`Erros Destino (${targetLabel})`}
+              binding={data.targetErrorBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('targetErrorBinding', { match: m })}
+              onAgg={(a) => patchBinding('targetErrorBinding', { aggregation: a })}
+            />
+
+            <div style={{ marginTop: 16, marginBottom: 8, fontSize: 11, color: '#a855f7', fontWeight: 'bold', borderTop: '1px solid #1e293b', paddingTop: 12 }}>
+              🧬 Parâmetros de Fibra (DOM) - Origem ({sourceLabel})
+            </div>
+            <BindRow
+              label="Temperatura DOM (°C)"
+              binding={data.sourceDomTempBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('sourceDomTempBinding', { match: m })}
+              onAgg={(a) => patchBinding('sourceDomTempBinding', { aggregation: a })}
+            />
+            <BindRow
+              label="Voltagem DOM (V)"
+              binding={data.sourceDomVoltBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('sourceDomVoltBinding', { match: m })}
+              onAgg={(a) => patchBinding('sourceDomVoltBinding', { aggregation: a })}
+            />
+            <BindRow
+              label="Corrente de Polarização Bias (mA)"
+              binding={data.sourceDomBiasBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('sourceDomBiasBinding', { match: m })}
+              onAgg={(a) => patchBinding('sourceDomBiasBinding', { aggregation: a })}
+            />
+            <BindRow
+              label="Potência Tx DOM (dBm ou mW)"
+              binding={data.sourceDomTxPowerBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('sourceDomTxPowerBinding', { match: m })}
+              onAgg={(a) => patchBinding('sourceDomTxPowerBinding', { aggregation: a })}
+            />
+            <BindRow
+              label="Potência Rx DOM (dBm ou mW)"
+              binding={data.sourceDomRxPowerBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('sourceDomRxPowerBinding', { match: m })}
+              onAgg={(a) => patchBinding('sourceDomRxPowerBinding', { aggregation: a })}
+            />
+
+            <div style={{ marginTop: 16, marginBottom: 8, fontSize: 11, color: '#a855f7', fontWeight: 'bold', borderTop: '1px solid #1e293b', paddingTop: 12 }}>
+              🧬 Parâmetros de Fibra (DOM) - Destino ({targetLabel})
+            </div>
+            <BindRow
+              label="Temperatura DOM (°C)"
+              binding={data.targetDomTempBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('targetDomTempBinding', { match: m })}
+              onAgg={(a) => patchBinding('targetDomTempBinding', { aggregation: a })}
+            />
+            <BindRow
+              label="Voltagem DOM (V)"
+              binding={data.targetDomVoltBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('targetDomVoltBinding', { match: m })}
+              onAgg={(a) => patchBinding('targetDomVoltBinding', { aggregation: a })}
+            />
+            <BindRow
+              label="Corrente de Polarização Bias (mA)"
+              binding={data.targetDomBiasBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('targetDomBiasBinding', { match: m })}
+              onAgg={(a) => patchBinding('targetDomBiasBinding', { aggregation: a })}
+            />
+            <BindRow
+              label="Potência Tx DOM (dBm ou mW)"
+              binding={data.targetDomTxPowerBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('targetDomTxPowerBinding', { match: m })}
+              onAgg={(a) => patchBinding('targetDomTxPowerBinding', { aggregation: a })}
+            />
+            <BindRow
+              label="Potência Rx DOM (dBm ou mW)"
+              binding={data.targetDomRxPowerBinding}
+              seriesKeys={seriesKeys}
+              onMatch={(m) => patchBinding('targetDomRxPowerBinding', { match: m })}
+              onAgg={(a) => patchBinding('targetDomRxPowerBinding', { aggregation: a })}
+            />
+
+            <button onClick={() => setShowSeries((s) => !s)} style={{ ...btnReset, width: '100%', marginTop: 8 }}>
+              {showSeries ? '▾ ocultar' : '▸ ver'} séries detectadas ({seriesKeys.length})
+            </button>
+            {showSeries && (
+              <div style={{ marginTop: 6, maxHeight: 100, overflowY: 'auto', background: '#0b1220', border: '1px solid #334155', borderRadius: 4, padding: 6 }}>
+                {seriesKeys.length === 0 && (
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Nenhuma série. Configure uma query no painel.</div>
+                )}
+                {seriesKeys.map((k, i) => (
+                  <div key={i} style={{ fontSize: 10.5, fontFamily: 'monospace', color: '#94a3b8', padding: '2px 0', borderBottom: '1px solid #1e293b', wordBreak: 'break-all' }}>
+                    {k}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+        </div>
+
+        {/* ── Excluir ── */}
+        <div style={{ borderTop: '1px solid #334155', paddingTop: 12, marginTop: 2 }}>
+          <button
+            onClick={() => {
+              if (window.confirm('Tem certeza que deseja excluir esta conexão?')) {
+                onDelete();
+                onClose();
+              }
+            }}
+            style={{ ...btnReset, width: '100%', borderColor: '#ef4444', color: '#ef4444' }}
+          >
+            🗑 Excluir Conexão
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+const BindRow: React.FC<{
+  label: string;
+  binding?: MetricBinding;
+  seriesKeys: string[];
+  onMatch: (m: string) => void;
+  onAgg: (a: Aggregation) => void;
+}> = ({ label, binding, seriesKeys, onMatch, onAgg }) => {
+  const listId = `series-keys-${label.replace(/\s+/g, '-').toLowerCase()}`;
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 3 }}>{label}</div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          type="text"
+          placeholder="ex: UERJ.*if.*in"
+          value={binding?.match ?? ''}
+          onChange={(e) => onMatch(e.target.value)}
+          list={listId}
+          style={{ ...inputText, flex: 1 }}
+        />
+        <datalist id={listId}>
+          {seriesKeys.map((k) => (
+            <option key={k} value={k} />
+          ))}
+        </datalist>
+        <select
+          value={binding?.aggregation ?? 'last'}
+          onChange={(e) => onAgg(e.target.value as Aggregation)}
+          style={{ ...inputText, flex: 'none', width: 64, cursor: 'pointer' }}
+        >
+          {AGGS.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+};
+
+const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <div>
+    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>{title}</div>
+    {children}
+  </div>
+);
+
+const Chip: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
+  <button
+    onClick={onClick}
+    style={{
+      padding: '4px 10px',
+      borderRadius: 4,
+      fontSize: 12,
+      cursor: 'pointer',
+      background: active ? '#3b82f6' : '#1e293b',
+      color: active ? '#fff' : '#cbd5e1',
+      border: `1px solid ${active ? '#3b82f6' : '#334155'}`,
+    }}
+  >
+    {children}
+  </button>
+);
+
+const inputText: React.CSSProperties = {
+  flex: 1,
+  background: '#1e293b',
+  border: '1px solid #334155',
+  borderRadius: 4,
+  color: '#e2e8f0',
+  padding: '5px 8px',
+  fontSize: 12,
+  fontFamily: 'monospace',
+};
+const btnClose: React.CSSProperties = {
+  background: 'transparent', color: '#94a3b8', border: '1px solid #334155',
+  borderRadius: 4, padding: '3px 9px', cursor: 'pointer', fontSize: 13,
+};
+const btnReset: React.CSSProperties = {
+  background: '#1e293b', color: '#94a3b8', border: '1px solid #334155',
+  borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 11,
+};

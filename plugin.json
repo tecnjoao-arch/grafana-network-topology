@@ -1,0 +1,22 @@
+{
+  "type": "panel",
+  "name": "Network Topology",
+  "id": "grafana-network-topology",
+  "info": {
+    "description": "Plugin de topologia de rede com binding dinâmico a métricas (Zabbix, Prometheus). Pensado para painéis de NOC.",
+    "author": {
+      "name": "Custom"
+    },
+    "keywords": ["network", "topology", "noc", "zabbix", "monitoring"],
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "version": "0.1.0",
+    "updated": "2026-05-14"
+  },
+  "dependencies": {
+    "grafanaVersion": "10.0.0",
+    "plugins": []
+  }
+}
