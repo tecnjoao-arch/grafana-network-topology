@@ -15,17 +15,28 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
   const { label, ip, deviceType, status, customIcon, color, iconSize, searchQuery, nodeWidth, nodeHeight, borderRadius, bgColor, linkUrl } = data as any;
   const { editMode, setNodeData } = useEditor();
 
+  // Tamanho "ao vivo" durante o resize: atualiza só o estado local (visual).
+  // A persistência nas options acontece apenas no fim (handleResizeEnd), evitando
+  // um onOptionsChange por tick — o que travava a UI e marcava o dashboard sujo.
+  const [liveSize, setLiveSize] = React.useState<{ w?: number; h?: number }>({});
+
+  // Quando as props de tamanho chegam (após persistir), o estado local volta a
+  // ser autoritativo das props — sem flash, pois os valores coincidem.
+  React.useEffect(() => { setLiveSize({}); }, [data.nodeWidth, data.nodeHeight]);
+
   const handleResize = (_: any, params: any) => {
+    setLiveSize({ w: Math.round(params.width), h: Math.round(params.height) });
+  };
+
+  const handleResizeEnd = (_: any, params: any) => {
+    setLiveSize({ w: Math.round(params.width), h: Math.round(params.height) });
     if (setNodeData) {
       setNodeData(id, { nodeWidth: Math.round(params.width), nodeHeight: Math.round(params.height) });
     }
   };
 
-  const handleResizeEnd = (_: any, params: any) => {
-    if (setNodeData) {
-      setNodeData(id, { nodeWidth: Math.round(params.width), nodeHeight: Math.round(params.height) });
-    }
-  };
+  const effWidth = liveSize.w ?? nodeWidth;
+  const effHeight = liveSize.h ?? nodeHeight;
 
   const handleNodeClick = (e: React.MouseEvent) => {
     if (!editMode && linkUrl) {
@@ -71,10 +82,10 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
         background: bgColor ?? 'rgba(15, 23, 42, 0.85)',
         border: `2px solid ${borderColor}`,
         boxShadow: status === 'down' ? '0 0 12px rgba(239,68,68,0.6)' : '0 2px 8px rgba(0,0,0,0.4)',
-        minWidth: nodeWidth ?? 90,
-        width: nodeWidth ? '100%' : 'auto',
-        minHeight: nodeHeight,
-        height: nodeHeight ? '100%' : 'auto',
+        minWidth: effWidth ?? 90,
+        width: effWidth ? '100%' : 'auto',
+        minHeight: effHeight,
+        height: effHeight ? '100%' : 'auto',
         boxSizing: 'border-box',
         transition: 'box-shadow 200ms, border-color 200ms, background 200ms, border-radius 200ms',
         position: 'relative',
