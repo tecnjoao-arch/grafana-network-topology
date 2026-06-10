@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { LinkEdgeData, LineStyle, LineAnimation, LINE_STYLES, LINE_ANIMATIONS, PathType, PATH_TYPES, LabelFooter, LABEL_FOOTERS } from '../types';
 import { MetricBinding, Aggregation } from '../utils/dataBinding';
+import { SeriesCombo } from './SeriesCombo';
 
 interface Props {
   edgeId: string;
@@ -645,24 +646,15 @@ const BindRow: React.FC<{
   onMatch: (m: string) => void;
   onAgg: (a: Aggregation) => void;
 }> = ({ label, binding, seriesKeys, onMatch, onAgg }) => {
-  const listId = `series-keys-${label.replace(/\s+/g, '-').toLowerCase()}`;
   return (
     <div style={{ marginBottom: 8 }}>
       <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 3 }}>{label}</div>
       <div style={{ display: 'flex', gap: 6 }}>
-        <input
-          type="text"
-          placeholder="ex: UERJ.*if.*in"
+        <SeriesCombo
           value={binding?.match ?? ''}
-          onChange={(e) => onMatch(e.target.value)}
-          list={listId}
-          style={{ ...inputText, flex: 1 }}
+          seriesKeys={seriesKeys}
+          onChange={onMatch}
         />
-        <datalist id={listId}>
-          {seriesKeys.map((k) => (
-            <option key={k} value={k} />
-          ))}
-        </datalist>
         <select
           value={binding?.aggregation ?? 'last'}
           onChange={(e) => onAgg(e.target.value as Aggregation)}

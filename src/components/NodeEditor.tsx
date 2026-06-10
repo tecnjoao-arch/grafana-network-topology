@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { DeviceNodeData, DeviceType } from '../types';
 import { MetricBinding, Aggregation } from '../utils/dataBinding';
 import { useEditor } from './EditorContext';
+import { SeriesCombo } from './SeriesCombo';
 
 interface Props {
   nodeId: string;
@@ -237,19 +238,12 @@ export const NodeEditor: React.FC<Props> = ({
         <Section title="Thresholds (Flowcharting)">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: '#0b1220', padding: 8, borderRadius: 6, border: '1px solid #1e293b' }}>
             <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
-              <input
-                type="text"
-                placeholder="Métrica de status"
+              <SeriesCombo
                 value={data.statusBinding?.match ?? ''}
-                onChange={(e) => patchBinding({ match: e.target.value })}
-                list="node-status-series"
-                style={{ ...inputText, flex: 1 }}
+                seriesKeys={seriesKeys}
+                placeholder="Métrica de status"
+                onChange={(m) => patchBinding({ match: m })}
               />
-              <datalist id="node-status-series">
-                {seriesKeys.map((k) => (
-                  <option key={k} value={k} />
-                ))}
-              </datalist>
               <select
                 value={data.statusBinding?.aggregation ?? 'last'}
                 onChange={(e) => patchBinding({ aggregation: e.target.value as Aggregation })}

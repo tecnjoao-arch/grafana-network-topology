@@ -11,7 +11,8 @@
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: edicao protegida do refresh, staleness configuravel, demo isolada, trafego legivel *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: rodape do card de interface configuravel \\(velocidade / fibra Tx-Rx / ambos / nenhum\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: remove mapa de exemplo *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: binding casa substring literal antes de regex *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: binding casa substring literal antes de regex *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: dropdown customizado de series nos bindings \\(SeriesCombo\\) *)"
     ]
   }
 }
