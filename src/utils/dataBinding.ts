@@ -150,6 +150,50 @@ export function resolveBinding(series: DataFrame[], binding?: MetricBinding): nu
   return undefined;
 }
 
+/** Série temporal completa (tempo+valor) de um binding — para gráficos. */
+export interface BindingSeries {
+  times: number[];
+  values: number[];
+}
+
+export function resolveBindingSeries(series: DataFrame[], binding?: MetricBinding): BindingSeries | undefined {
+  if (!binding || !binding.match || series.length === 0) return undefined;
+
+  let re: RegExp | null = null;
+  try {
+    re = new RegExp(binding.match, 'i');
+  } catch {
+    re = null;
+  }
+  const lowerMatch = binding.match.toLowerCase();
+  const matches = (h: string) =>
+    h.toLowerCase().includes(lowerMatch) || (re ? re.test(h) : false);
+
+  for (const frame of series) {
+    if (binding.query && (frame.refId ?? '') !== binding.query) continue;
+    const timeField = frame.fields.find((f) => f.type === 'time');
+    if (!timeField) continue;
+    for (const field of frame.fields) {
+      if (field.type !== 'number') continue;
+      if (!matches(haystack(frame, field))) continue;
+      const rawV = field.values as unknown as any[];
+      const rawT = timeField.values as unknown as any[];
+      const times: number[] = [];
+      const values: number[] = [];
+      for (let i = 0; i < rawV.length; i++) {
+        const v = Number(rawV[i]);
+        const t = Number(rawT[i]);
+        if (!isNaN(v) && !isNaN(t)) {
+          times.push(t);
+          values.push(v);
+        }
+      }
+      if (values.length) return { times, values };
+    }
+  }
+  return undefined;
+}
+
 /** Resolve o valor textual de um binding (útil para extrair IPs ou status em texto). */
 export function resolveTextBinding(series: DataFrame[], binding?: MetricBinding): string | undefined {
   if (!binding || !binding.match || series.length === 0) return undefined;

@@ -802,6 +802,7 @@ const TopologyInner: React.FC<InnerProps> = ({
           data={clickedEdge.data as LinkEdgeData}
           sourceLabel={findNodeLabel(clickedEdge.source)}
           targetLabel={findNodeLabel(clickedEdge.target)}
+          series={data?.series ?? []}
           onClose={() => setClicked(null)}
         />
       )}
@@ -809,6 +810,7 @@ const TopologyInner: React.FC<InnerProps> = ({
       {/* Editor de propriedades (modo edição) */}
       {editingEdge && (
         <EdgeEditor
+          key={editingEdge.id}
           edgeId={editingEdge.id}
           data={editingEdge.data as LinkData}
           sourceLabel={findNodeLabel(editingEdge.source)}

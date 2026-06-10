@@ -3,23 +3,38 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
+import { DataFrame } from '@grafana/data';
 import { LinkEdgeData } from '../types';
 import { formatBitsPerSec, linkUtilization } from '../utils/format';
+import { resolveBindingSeries, BindingSeries } from '../utils/dataBinding';
 
 interface Props {
   edgeId: string;
   data: LinkEdgeData;
   sourceLabel: string;
   targetLabel: string;
+  /** Séries das queries do painel — usadas pro gráfico histórico */
+  series?: DataFrame[];
   onClose: () => void;
 }
 
-export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLabel, onClose }) => {
+export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLabel, series = [], onClose }) => {
   const util = linkUtilization(Math.max(data?.trafficUp ?? 0, data?.trafficDown ?? 0), data?.linkSpeed);
   const utilPct = (util * 100).toFixed(1);
   const status = data?.status ?? 'unknown';
 
   const [showDom, setShowDom] = React.useState(false);
+
+  // Histórico de tráfego do link no período do dashboard (direção A→B e B→A).
+  // Usa o binding do lado A; sem ele, cai pro global e por fim pro espelho do lado B.
+  const upHist = React.useMemo(
+    () => resolveBindingSeries(series, data.sourceTrafficUpBinding ?? data.trafficUpBinding ?? data.targetTrafficDownBinding),
+    [series, data.sourceTrafficUpBinding, data.trafficUpBinding, data.targetTrafficDownBinding]
+  );
+  const downHist = React.useMemo(
+    () => resolveBindingSeries(series, data.sourceTrafficDownBinding ?? data.trafficDownBinding ?? data.targetTrafficUpBinding),
+    [series, data.sourceTrafficDownBinding, data.trafficDownBinding, data.targetTrafficUpBinding]
+  );
 
   // Verifica se existe alguma métrica DOM ativa para exibir o botão
   const hasDomMetrics = !!(
@@ -125,35 +140,65 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
 
           {!showDom ? (
             <>
-              {/* Grid de informações */}
+              {/* Tráfego por lado (cada lado mede a própria interface) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 13 }}>
-                <Field label="Interface origem" value={data.sourceInterface ?? '—'} mono />
-                <Field label="Interface destino" value={data.targetInterface ?? '—'} mono />
-                <Field label="Upload" value={formatBitsPerSec(data.trafficUp)} color="#22c55e" />
-                <Field label="Download" value={formatBitsPerSec(data.trafficDown)} color="#22d3ee" />
+                <div style={sideBox}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#3b82f6', marginBottom: 8, fontFamily: 'monospace' }}>
+                    {sourceLabel}{data.sourceInterface ? ` · ${data.sourceInterface}` : ''}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <Field label="Upload" value={formatBitsPerSec(data.sourceTrafficUp ?? data.trafficUp)} color="#22c55e" />
+                    <Field label="Download" value={formatBitsPerSec(data.sourceTrafficDown ?? data.trafficDown)} color="#22d3ee" />
+                  </div>
+                  {data.sourceErrors !== undefined && (
+                    <div style={{ marginTop: 8 }}>
+                      <Field label="Erros" value={String(data.sourceErrors)} color={data.sourceErrors > 0 ? '#ef4444' : '#94a3b8'} />
+                    </div>
+                  )}
+                </div>
+                <div style={sideBox}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#10b981', marginBottom: 8, fontFamily: 'monospace' }}>
+                    {targetLabel}{data.targetInterface ? ` · ${data.targetInterface}` : ''}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <Field label="Upload" value={formatBitsPerSec(data.targetTrafficUp ?? data.trafficDown)} color="#22c55e" />
+                    <Field label="Download" value={formatBitsPerSec(data.targetTrafficDown ?? data.trafficUp)} color="#22d3ee" />
+                  </div>
+                  {data.targetErrors !== undefined && (
+                    <div style={{ marginTop: 8 }}>
+                      <Field label="Erros" value={String(data.targetErrors)} color={data.targetErrors > 0 ? '#ef4444' : '#94a3b8'} />
+                    </div>
+                  )}
+                </div>
                 <Field label="Capacidade" value={formatBitsPerSec(data.linkSpeed)} color="#94a3b8" />
                 <Field label="Utilização" value={`${utilPct}%`} />
               </div>
 
-              {/* Placeholder pro gráfico histórico */}
-              <div
-                style={{
-                  marginTop: 16,
-                  padding: 14,
-                  border: '1px dashed #334155',
-                  borderRadius: 6,
-                  background: 'rgba(30, 41, 59, 0.4)',
-                  textAlign: 'center',
-                  color: '#64748b',
-                  fontSize: 12,
-                }}
-              >
-                <div style={{ fontSize: 28, marginBottom: 6 }}>📈</div>
-                <div>Gráfico de tráfego histórico</div>
-                <div style={{ fontSize: 11, marginTop: 4, color: '#475569' }}>
-                  (será conectado ao Zabbix na próxima etapa)
+              {/* Gráfico de tráfego histórico (período do dashboard) */}
+              {(upHist || downHist) ? (
+                <div style={{ marginTop: 16 }}>
+                  <TrafficChart up={upHist} down={downHist} />
                 </div>
-              </div>
+              ) : (
+                <div
+                  style={{
+                    marginTop: 16,
+                    padding: 14,
+                    border: '1px dashed #334155',
+                    borderRadius: 6,
+                    background: 'rgba(30, 41, 59, 0.4)',
+                    textAlign: 'center',
+                    color: '#64748b',
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ fontSize: 28, marginBottom: 6 }}>📈</div>
+                  <div>Sem histórico para exibir</div>
+                  <div style={{ fontSize: 11, marginTop: 4, color: '#475569' }}>
+                    Configure os bindings de tráfego do link (Lado A/B) no modo edição.
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             /* Diagnóstico de Fibra Óptica (DOM) */
@@ -240,6 +285,62 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
     </div>,
     document.body
   );
+};
+
+/** Gráfico de área simples (SVG) com as duas direções do link. */
+const TrafficChart: React.FC<{ up?: BindingSeries; down?: BindingSeries }> = ({ up, down }) => {
+  const W = 540, H = 160, P = 8;
+  const all = [...(up?.values ?? []), ...(down?.values ?? [])];
+  if (all.length === 0) return null;
+  const tAll = [...(up?.times ?? []), ...(down?.times ?? [])];
+  const vMax = (Math.max(...all) || 1) * 1.08;
+  const tMin = Math.min(...tAll);
+  const tMax = Math.max(...tAll);
+  const span = Math.max(1, tMax - tMin);
+  const px = (t: number) => P + ((t - tMin) / span) * (W - 2 * P);
+  const py = (v: number) => H - P - (v / vMax) * (H - 2 * P);
+  const line = (s?: BindingSeries) =>
+    s && s.values.length
+      ? s.values.map((v, i) => `${i ? 'L' : 'M'} ${px(s.times[i]).toFixed(1)} ${py(v).toFixed(1)}`).join(' ')
+      : '';
+  const area = (s?: BindingSeries) =>
+    s && s.values.length
+      ? `${line(s)} L ${px(s.times[s.times.length - 1]).toFixed(1)} ${H - P} L ${px(s.times[0]).toFixed(1)} ${H - P} Z`
+      : '';
+  const fmtT = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <div style={{ border: '1px solid #1e293b', borderRadius: 6, background: 'rgba(30,41,59,0.4)', padding: '10px 12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>
+        <span style={{ fontWeight: 600 }}>📈 Tráfego no período do dashboard</span>
+        <span>
+          <span style={{ color: '#22c55e' }}>● ↑ A→B</span>
+          <span style={{ color: '#22d3ee', marginLeft: 10 }}>● ↓ B→A</span>
+        </span>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+        {[0.25, 0.5, 0.75].map((f) => (
+          <line key={f} x1={P} x2={W - P} y1={P + f * (H - 2 * P)} y2={P + f * (H - 2 * P)} stroke="rgba(255,255,255,0.05)" />
+        ))}
+        {down && <path d={area(down)} fill="rgba(34,211,238,0.12)" />}
+        {up && <path d={area(up)} fill="rgba(34,197,94,0.12)" />}
+        {down && <path d={line(down)} fill="none" stroke="#22d3ee" strokeWidth={1.6} />}
+        {up && <path d={line(up)} fill="none" stroke="#22c55e" strokeWidth={1.6} />}
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginTop: 4 }}>
+        <span>{fmtT(tMin)}</span>
+        <span>pico: {formatBitsPerSec(Math.max(...all))}</span>
+        <span>{fmtT(tMax)}</span>
+      </div>
+    </div>
+  );
+};
+
+const sideBox: React.CSSProperties = {
+  background: '#0b1220',
+  border: '1px solid #1e293b',
+  borderRadius: 6,
+  padding: 10,
 };
 
 const Field: React.FC<{ label: string; value: string; mono?: boolean; color?: string }> = ({ label, value, mono, color }) => (

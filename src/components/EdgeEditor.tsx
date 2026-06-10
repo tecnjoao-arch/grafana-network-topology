@@ -22,6 +22,16 @@ const AGGS: Aggregation[] = ['last', 'avg', 'max', 'min', 'first'];
 
 const PRESET_COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#22d3ee', '#3b82f6', '#a855f7', '#ec4899', '#94a3b8', '#ffffff'];
 
+/** Converte "400G", "10g", "1.5T", "10000000000" em bps. undefined se vazio/inválido. */
+function parseBps(txt: string): number | undefined {
+  const m = txt.trim().match(/^([\d.,]+)\s*([kKmMgGtT])?/);
+  if (!m) return undefined;
+  const num = parseFloat(m[1].replace(',', '.'));
+  if (isNaN(num)) return undefined;
+  const mult: Record<string, number> = { k: 1e3, m: 1e6, g: 1e9, t: 1e12 };
+  return Math.round(num * (mult[(m[2] ?? '').toLowerCase()] ?? 1));
+}
+
 const STYLE_LABEL: Record<LineStyle, string> = {
   solid: 'Sólida',
   dashed: 'Tracejada',
@@ -50,6 +60,8 @@ const FOOTER_LABEL: Record<LabelFooter, string> = {
 export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, seriesKeys, onChange, onDelete, onClose }) => {
   const color = data.color ?? '#22c55e';
   const [showSeries, setShowSeries] = useState(false);
+  // Texto da capacidade fixa (só grava quando o usuário digita)
+  const [speedText, setSpeedText] = useState('');
 
   const patchBinding = (
     key:
@@ -485,6 +497,20 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
                 onMatch={(m) => patchBinding('speedBinding', { match: m })}
                 onAgg={(a) => patchBinding('speedBinding', { aggregation: a })}
               />
+              {/* Capacidade fixa: fallback quando o item Speed não resolve (coleta lenta) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                <span style={{ fontSize: 10, color: '#64748b', whiteSpace: 'nowrap' }}>ou fixa:</span>
+                <input
+                  type="text"
+                  placeholder={data.linkSpeed !== undefined ? `atual: ${data.linkSpeed} bps` : 'ex: 400G, 10G, 1.5T'}
+                  value={speedText}
+                  onChange={(e) => {
+                    setSpeedText(e.target.value);
+                    onChange({ linkSpeed: parseBps(e.target.value) });
+                  }}
+                  style={{ ...inputText, flex: 1 }}
+                />
+              </div>
             </div>
             
             <div style={{ marginTop: 12, marginBottom: 8, fontSize: 11, color: '#64748b', fontWeight: 'bold' }}>
