@@ -54,7 +54,11 @@ export function listSeriesKeys(series: DataFrame[]): string[] {
   const keys = new Set<string>();
   for (const frame of series) {
     for (const field of frame.fields) {
-      if (field.type === 'number') keys.add(haystack(frame, field));
+      // Inclui campos de texto: os bindings de IP (resolveTextBinding) procuram
+      // em séries string — elas também precisam aparecer nas sugestões.
+      if (field.type === 'number' || field.type === 'string') {
+        keys.add(haystack(frame, field));
+      }
     }
   }
   return Array.from(keys);
