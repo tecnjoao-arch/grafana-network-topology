@@ -61,6 +61,16 @@ export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
         name: 'Mostrar minimap',
         defaultValue: DEFAULT_OPTIONS.showMinimap,
         category: ['Visual'],
+      })
+      .addNumberInput({
+        path: 'staleThresholdSec',
+        name: 'Limite de obsolescência (s)',
+        description:
+          'Segundos sem atualização para uma métrica ser considerada obsoleta (o status cai). ' +
+          'A tolerância real respeita o intervalo de cada série. 0 desativa a checagem.',
+        defaultValue: DEFAULT_OPTIONS.staleThresholdSec,
+        settings: { min: 0, step: 10 },
+        category: ['Dados'],
       });
     return builder;
   });

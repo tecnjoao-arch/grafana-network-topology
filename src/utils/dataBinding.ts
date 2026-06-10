@@ -6,6 +6,13 @@ import { DataFrame, Field } from '@grafana/data';
 
 export type Aggregation = 'last' | 'first' | 'avg' | 'max' | 'min';
 
+// Limite (ms) padrão de obsolescência, ajustável pelo painel via setStaleThresholdMs.
+let defaultStaleMs = 180000;
+/** Define o limite global de obsolescência (ms). 0 desativa a checagem de stale. */
+export function setStaleThresholdMs(ms: number): void {
+  defaultStaleMs = Math.max(0, ms || 0);
+}
+
 export interface MetricBinding {
   /** Filtra por refId da query (ex: "A"). Vazio = qualquer query */
   query?: string;
@@ -106,7 +113,7 @@ export function resolveBinding(series: DataFrame[], binding?: MetricBinding): nu
       // Só se aplica a 'last' (valor "agora"); agregações de janela (avg/max/min/first)
       // continuam válidas mesmo que o último ponto seja antigo.
       const timeField = frame.fields.find((f) => f.type === 'time');
-      if (agg === 'last' && timeField && globalMaxTime > 0) {
+      if (agg === 'last' && defaultStaleMs > 0 && timeField && globalMaxTime > 0) {
         const timeVals = timeField.values as unknown as any[];
         let lastIdx = -1;
         for (let i = vals.length - 1; i >= 0; i--) {
@@ -117,7 +124,12 @@ export function resolveBinding(series: DataFrame[], binding?: MetricBinding): nu
         }
         if (lastIdx !== -1) {
           const tVal = Number(timeVals[lastIdx]);
-          if (typeof tVal === 'number' && !isNaN(tVal) && (globalMaxTime - tVal > 180000)) { // 3 minutos
+          // Tolerância respeita o intervalo de coleta DESTA série: uma métrica de
+          // 5 min não pode parecer obsoleta só porque outra série atualiza a cada 30s.
+          const tFirst = Number(timeVals[0]);
+          const interval = (lastIdx > 0 && !isNaN(tFirst) && !isNaN(tVal)) ? (tVal - tFirst) / lastIdx : 0;
+          const tolerance = Math.max(defaultStaleMs, interval * 2.5);
+          if (!isNaN(tVal) && (globalMaxTime - tVal > tolerance)) {
             return undefined; // Considera obsoleto (não resolve valor, forçando queda no status)
           }
         }

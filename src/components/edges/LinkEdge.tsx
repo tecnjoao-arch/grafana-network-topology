@@ -120,17 +120,15 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
     });
   } else {
     if (pathType === 'curved') {
-      if (points.length === 2) {
-         edgePath = `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
-      } else {
-        edgePath = `M ${points[0].x} ${points[0].y}`;
-        for (let i = 1; i < points.length - 1; i++) {
-          const xc = (points[i].x + points[i + 1].x) / 2;
-          const yc = (points[i].y + points[i + 1].y) / 2;
-          edgePath += ` Q ${points[i].x} ${points[i].y}, ${xc} ${yc}`;
-        }
-        edgePath += ` L ${points[points.length - 1].x} ${points[points.length - 1].y}`;
+      // Aqui sempre há waypoints (o caso sem waypoints é tratado acima via bezier),
+      // logo points.length >= 3.
+      edgePath = `M ${points[0].x} ${points[0].y}`;
+      for (let i = 1; i < points.length - 1; i++) {
+        const xc = (points[i].x + points[i + 1].x) / 2;
+        const yc = (points[i].y + points[i + 1].y) / 2;
+        edgePath += ` Q ${points[i].x} ${points[i].y}, ${xc} ${yc}`;
       }
+      edgePath += ` L ${points[points.length - 1].x} ${points[points.length - 1].y}`;
     } else if (pathType === 'step') {
       edgePath = `M ${points[0].x} ${points[0].y}`;
       for (let i = 0; i < points.length - 1; i++) {

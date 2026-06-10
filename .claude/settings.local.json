@@ -7,7 +7,8 @@
       "Bash(npm run *)",
       "Bash(git add *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: type-safety + perf + copy-paste + staleness *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: resize de no persiste so no fim \\(estado local durante o drag\\) *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: resize de no persiste so no fim \\(estado local durante o drag\\) *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: edicao protegida do refresh, staleness configuravel, demo isolada, trafego legivel *)"
     ]
   }
 }

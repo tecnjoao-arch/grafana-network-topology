@@ -239,6 +239,8 @@ export interface PanelOptions {
   editMode: boolean;
   /** Mostrar legenda de cores no canto */
   showLegend: boolean;
+  /** Segundos sem atualização para considerar uma métrica obsoleta (status cai). 0 desativa. */
+  staleThresholdSec: number;
 }
 
 export const DEFAULT_OPTIONS: PanelOptions = {
@@ -255,6 +257,7 @@ export const DEFAULT_OPTIONS: PanelOptions = {
   animateLinks: true,
   editMode: false,
   showLegend: true,
+  staleThresholdSec: 180,
 };
 
 export const EXAMPLE_TOPOLOGY: NetworkTopology = {

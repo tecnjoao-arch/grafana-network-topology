@@ -10,7 +10,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { PanelOptions, EXAMPLE_TOPOLOGY, NetworkTopology, LinkEdgeData } from '../types';
+import { PanelOptions, EXAMPLE_TOPOLOGY, NetworkTopology, LinkEdgeData, DEFAULT_OPTIONS } from '../types';
 import { DeviceNode } from './nodes/DeviceNode';
 import { LinkEdge } from './edges/LinkEdge';
 import { LinkTooltip } from './LinkTooltip';
@@ -19,7 +19,12 @@ import { EdgeEditor } from './EdgeEditor';
 import { NodeEditor } from './NodeEditor';
 import { EditorProvider } from './EditorContext';
 import { LinkEdgeData as LinkData } from '../types';
-import { resolveBinding, resolveTextBinding, listSeriesKeys } from '../utils/dataBinding';
+import { resolveBinding, resolveTextBinding, listSeriesKeys, setStaleThresholdMs } from '../utils/dataBinding';
+
+// Gera ids únicos e estáveis dentro do processo. Date.now() sozinho colide
+// quando o usuário duplica/cola vários nós no mesmo milissegundo.
+let __idSeq = 0;
+const genId = (prefix: string) => `${prefix}-${Date.now()}-${(__idSeq++).toString(36)}`;
 
 const Sidebar: React.FC<{
   showIp: boolean;
@@ -166,7 +171,15 @@ interface ClickState {
 export const TopologyPanel: React.FC<Props> = (props) => {
   const { options, width, height, data } = props;
 
-  const topology = options.topology?.nodes?.length ? options.topology : EXAMPLE_TOPOLOGY;
+  // Aplica o limite de obsolescência configurado antes de resolver os bindings.
+  setStaleThresholdMs((options.staleThresholdSec ?? DEFAULT_OPTIONS.staleThresholdSec) * 1000);
+
+  // Topologia REAL (editável) — pode estar vazia. O exemplo aparece apenas como
+  // demonstração visual quando vazio E fora do modo edição; assim a edição nunca
+  // grava os nós de demonstração nas options do painel.
+  const realTopology = options.topology ?? DEFAULT_OPTIONS.topology;
+  const isEmpty = !realTopology.nodes?.length;
+  const topology = isEmpty && !options.editMode ? EXAMPLE_TOPOLOGY : realTopology;
   const series = data?.series ?? [];
 
   const [showIp, setShowIp] = useState(false);
@@ -280,14 +293,22 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         }
       }
 
+      // Tráfego por lado (A=origem, B=destino). O lado B espelha o A: o "upload"
+      // de B corresponde ao "download" do link e vice-versa. Precedência em cada
+      // campo: binding do lado → binding global → estático do lado → estático global.
+      const sourceUp   = srcUp   ?? up   ?? e.data.sourceTrafficUp   ?? e.data.trafficUp;
+      const sourceDown = srcDown ?? down ?? e.data.sourceTrafficDown ?? e.data.trafficDown;
+      const targetUp   = tgtUp   ?? down ?? e.data.targetTrafficUp   ?? e.data.trafficDown ?? e.data.trafficUp;
+      const targetDown = tgtDown ?? up   ?? e.data.targetTrafficDown ?? e.data.trafficUp   ?? e.data.trafficDown;
+
       const liveData: LinkEdgeData = {
         ...e.data,
         trafficUp: up ?? e.data.trafficUp,
         trafficDown: down ?? e.data.trafficDown,
-        sourceTrafficUp: srcUp ?? up ?? e.data.sourceTrafficUp ?? e.data.trafficUp,
-        sourceTrafficDown: srcDown ?? down ?? e.data.sourceTrafficDown ?? e.data.trafficDown,
-        targetTrafficUp: tgtUp ?? down ?? e.data.targetTrafficUp ?? (e.data.trafficDown !== undefined ? e.data.trafficDown : e.data.trafficUp),
-        targetTrafficDown: tgtDown ?? up ?? e.data.targetTrafficDown ?? (e.data.trafficUp !== undefined ? e.data.trafficUp : e.data.trafficDown),
+        sourceTrafficUp: sourceUp,
+        sourceTrafficDown: sourceDown,
+        targetTrafficUp: targetUp,
+        targetTrafficDown: targetDown,
         linkSpeed: speed ?? e.data.linkSpeed,
         sourceIp: srcIp,
         targetIp: tgtIp,
@@ -380,6 +401,9 @@ const TopologyInner: React.FC<InnerProps> = ({
   // Tracking do mouse para âncoras exatas
   const lastMousePos = useRef<{ x: number; y: number } | null>(null);
   const startMousePos = useRef<{ x: number; y: number } | null>(null);
+  // True enquanto um nó está sendo arrastado — usado para não resetar a posição
+  // no meio do arraste quando chega um refresh de dados do Grafana.
+  const draggingRef = useRef(false);
 
   useEffect(() => {
     const handleMove = (e: MouseEvent) => { lastMousePos.current = { x: e.clientX, y: e.clientY }; };
@@ -417,8 +441,8 @@ const TopologyInner: React.FC<InnerProps> = ({
           const offset = 35;
           // Desloca o grupo inteiro por `offset`, preservando o layout relativo
           // entre os nós copiados (em vez de empilhar tudo na mesma diagonal).
-          const newNodes = clipboard.current.map((clip, idx) => {
-            const id = `node-${Date.now()}-${idx}`;
+          const newNodes = clipboard.current.map((clip) => {
+            const id = genId('node');
             const base = clip.position ?? { x: 100, y: 100 };
             return {
               id,
@@ -452,9 +476,24 @@ const TopologyInner: React.FC<InnerProps> = ({
     }
   }, [options.editMode]);
 
-  // Sincroniza quando a topologia muda externamente (ex: usuário editou outras options)
-  useEffect(() => { setNodes(initialNodes); }, [initialNodes, setNodes]);
-  useEffect(() => { setEdges(initialEdges); }, [initialEdges, setEdges]);
+  // Re-sincroniza com a topologia/dados sem destruir a interação em curso:
+  //  • não toca nos nós enquanto há um arraste em andamento (evita o nó "voltar"
+  //    quando o Grafana atualiza as séries no meio do drag);
+  //  • preserva a seleção atual — senão um refresh zeraria a seleção no meio de
+  //    uma edição em massa.
+  useEffect(() => {
+    if (draggingRef.current) return;
+    setNodes((curr) => {
+      const sel = new Set(curr.filter((n) => n.selected).map((n) => n.id));
+      return sel.size ? initialNodes.map((n) => (sel.has(n.id) ? { ...n, selected: true } : n)) : initialNodes;
+    });
+  }, [initialNodes, setNodes]);
+  useEffect(() => {
+    setEdges((curr) => {
+      const sel = new Set(curr.filter((e) => e.selected).map((e) => e.id));
+      return sel.size ? initialEdges.map((e) => (sel.has(e.id) ? { ...e, selected: true } : e)) : initialEdges;
+    });
+  }, [initialEdges, setEdges]);
 
   // Persiste waypoints de uma aresta nas options do painel
   const setEdgeWaypoints = useCallback((edgeId: string, waypoints: Array<{ x: number; y: number }>) => {
@@ -528,7 +567,7 @@ const TopologyInner: React.FC<InnerProps> = ({
     if (!onOptionsChange) return;
     const nodeToCopy = topology.nodes.find(n => n.id === nodeId);
     if (!nodeToCopy) return;
-    const id = `node-${Date.now()}`;
+    const id = genId('node');
     const newNode = {
       id,
       position: { x: nodeToCopy.position.x + 35, y: nodeToCopy.position.y + 35 },
@@ -546,7 +585,7 @@ const TopologyInner: React.FC<InnerProps> = ({
 
   const addNode = useCallback(() => {
     if (!onOptionsChange) return;
-    const id = `node-${Date.now()}`;
+    const id = genId('node');
     const newNode = {
       id,
       position: { x: 150, y: 150 },
@@ -597,7 +636,7 @@ const TopologyInner: React.FC<InnerProps> = ({
     };
 
     const newEdge = {
-      id: `edge-${Date.now()}`,
+      id: genId('edge'),
       source: connection.source,
       target: connection.target,
       data: {
@@ -692,6 +731,8 @@ const TopologyInner: React.FC<InnerProps> = ({
         edges={edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeDragStart={() => { draggingRef.current = true; }}
+        onNodeDragStop={() => { draggingRef.current = false; }}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         connectionMode={'loose' as any}
@@ -725,14 +766,15 @@ const TopologyInner: React.FC<InnerProps> = ({
           />
         )}
         {options.editMode && <EditModeBanner onAddNode={addNode} />}
-        {!options.editMode && topology.nodes.length === 0 && (
+        {options.editMode && topology.nodes.length === 0 && (
           <div style={{
             position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             background: 'rgba(15, 23, 42, 0.9)', padding: '24px 40px', borderRadius: 12,
-            border: '1px solid #334155', color: '#cbd5e1', textAlign: 'center', zIndex: 10
+            border: '1px solid #334155', color: '#cbd5e1', textAlign: 'center', zIndex: 10,
+            pointerEvents: 'none',
           }}>
             <h2 style={{ margin: '0 0 8px 0', color: '#f59e0b' }}>Topologia Vazia</h2>
-            <p style={{ margin: 0 }}>Ative o Modo Edição nas opções do painel<br/>e clique em "Adicionar Equipamento".</p>
+            <p style={{ margin: 0 }}>Clique em <b>"Adicionar Equipamento"</b> no banner<br/>acima para começar a montar o mapa.</p>
           </div>
         )}
         {options.showLegend && <Legend />}
