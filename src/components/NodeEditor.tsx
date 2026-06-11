@@ -78,7 +78,7 @@ export const NodeEditor: React.FC<Props> = ({
         position: 'fixed',
         top: 70,
         right: 20,
-        width: 290,
+        width: 340,
         maxHeight: 'calc(100vh - 90px)',
         overflowY: 'auto',
         background: '#0f172a',

@@ -69,14 +69,17 @@ function offsetPath(pts: Pt[], d: number): string {
 export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }) => {
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
-  const { editMode, setEdgeWaypoints, setEdgeAnchor } = useEditor();
+  const { editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData } = useEditor();
   const { screenToFlowPosition } = useReactFlow();
 
   const [localWp, setLocalWp] = useState<Pt[]>(data?.waypoints ?? []);
   const [localSrcA, setLocalSrcA] = useState<Pt | undefined>(data?.sourceAnchor);
   const [localTgtA, setLocalTgtA] = useState<Pt | undefined>(data?.targetAnchor);
+  const [localSrcOff, setLocalSrcOff] = useState<Pt | undefined>(data?.sourceLabelOffset);
+  const [localTgtOff, setLocalTgtOff] = useState<Pt | undefined>(data?.targetLabelOffset);
   const dragWp = useRef<number | null>(null);
   const dragEnd = useRef<'source' | 'target' | null>(null);
+  const dragLabel = useRef<{ which: 'source' | 'target'; startPointer: Pt; startOff: Pt } | null>(null);
 
   useEffect(() => {
     if (dragWp.current === null) setLocalWp(data?.waypoints ?? []);
@@ -87,6 +90,12 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
       setLocalTgtA(data?.targetAnchor);
     }
   }, [data?.sourceAnchor, data?.targetAnchor]);
+  useEffect(() => {
+    if (dragLabel.current === null) {
+      setLocalSrcOff(data?.sourceLabelOffset);
+      setLocalTgtOff(data?.targetLabelOffset);
+    }
+  }, [data?.sourceLabelOffset, data?.targetLabelOffset]);
 
   if (!sourceNode || !targetNode) return null;
 
@@ -207,8 +216,9 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
   const totalLength = points.reduce((acc, p, idx) => idx === 0 ? 0 : acc + Math.hypot(p.x - points[idx - 1].x, p.y - points[idx - 1].y), 0);
   const OFF = totalLength < 160 ? Math.max(30, totalLength * 0.28) : 58;
   
-  const srcLabelPos = { x: sp.x + s1.ux * OFF, y: sp.y + s1.uy * OFF };
-  const tgtLabelPos = { x: tp.x + t1.ux * OFF, y: tp.y + t1.uy * OFF };
+  // Posição final do card = ponto na linha + deslocamento manual (arrastável)
+  const srcLabelPos = { x: sp.x + s1.ux * OFF + (localSrcOff?.x ?? 0), y: sp.y + s1.uy * OFF + (localSrcOff?.y ?? 0) };
+  const tgtLabelPos = { x: tp.x + t1.ux * OFF + (localTgtOff?.x ?? 0), y: tp.y + t1.uy * OFF + (localTgtOff?.y ?? 0) };
 
   // ── Drag de waypoint ──
   const onWpDown = (idx: number) => (e: React.PointerEvent) => {
@@ -219,7 +229,19 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
   const onWpMove = (e: React.PointerEvent) => {
     if (dragWp.current === null) return;
     const f = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-    setLocalWp((c) => { const n = [...c]; n[dragWp.current!] = { x: Math.round(f.x), y: Math.round(f.y) }; return n; });
+    const idx = dragWp.current;
+    let nx = Math.round(f.x);
+    let ny = Math.round(f.y);
+    // Snap magnético: alinha com os pontos vizinhos (segmentos orto perfeitos)
+    const SNAP = 10;
+    const prev = idx === 0 ? sp : localWp[idx - 1];
+    const next = idx === localWp.length - 1 ? tp : localWp[idx + 1];
+    for (const nb of [prev, next]) {
+      if (!nb) continue;
+      if (Math.abs(nx - nb.x) <= SNAP) nx = Math.round(nb.x);
+      if (Math.abs(ny - nb.y) <= SNAP) ny = Math.round(nb.y);
+    }
+    setLocalWp((c) => { const n = [...c]; n[idx] = { x: nx, y: ny }; return n; });
   };
   const onWpUp = (e: React.PointerEvent) => {
     if (dragWp.current === null) return;
@@ -254,6 +276,37 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
     dragEnd.current = null;
     const a = which === 'source' ? localSrcA : localTgtA;
     if (a) setEdgeAnchor(id, which, a);
+  };
+
+  // ── Drag dos cards de interface (modo edição) ──
+  const onLabelDown = (which: 'source' | 'target') => (e: React.PointerEvent) => {
+    if (!editMode) return;
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    const f = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    dragLabel.current = {
+      which,
+      startPointer: f,
+      startOff: (which === 'source' ? localSrcOff : localTgtOff) ?? { x: 0, y: 0 },
+    };
+  };
+  const onLabelMove = (e: React.PointerEvent) => {
+    const d = dragLabel.current;
+    if (!d) return;
+    const f = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    const off = {
+      x: Math.round(d.startOff.x + f.x - d.startPointer.x),
+      y: Math.round(d.startOff.y + f.y - d.startPointer.y),
+    };
+    if (d.which === 'source') setLocalSrcOff(off); else setLocalTgtOff(off);
+  };
+  const onLabelUp = (e: React.PointerEvent) => {
+    const d = dragLabel.current;
+    if (!d) return;
+    (e.target as Element).releasePointerCapture?.(e.pointerId);
+    dragLabel.current = null;
+    const off = d.which === 'source' ? localSrcOff : localTgtOff;
+    if (off) setEdgeData(id, d.which === 'source' ? { sourceLabelOffset: off } : { targetLabelOffset: off });
   };
 
   // Duplo-clique na linha → adiciona waypoint no segmento mais próximo
@@ -405,6 +458,10 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             y={srcLabelPos.y}
             color={color}
             showTraffic={!!data.showTrafficBox && !data.hideTrafficBox}
+            draggable={editMode}
+            onDragDown={onLabelDown('source')}
+            onDragMove={onLabelMove}
+            onDragUp={onLabelUp}
           />
         )}
         {data?.targetInterface && (
@@ -422,6 +479,10 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             y={tgtLabelPos.y}
             color={color}
             showTraffic={!!data.showTrafficBox && !data.hideTrafficBox}
+            draggable={editMode}
+            onDragDown={onLabelDown('target')}
+            onDragMove={onLabelMove}
+            onDragUp={onLabelUp}
           />
         )}
       </EdgeLabelRenderer>
@@ -467,7 +528,12 @@ const IfLabel: React.FC<{
   y: number;
   color: string;
   showTraffic: boolean;
-}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic }) => {
+  /** Modo edição: card arrastável (reposicionamento manual) */
+  draggable?: boolean;
+  onDragDown?: (e: React.PointerEvent) => void;
+  onDragMove?: (e: React.PointerEvent) => void;
+  onDragUp?: (e: React.PointerEvent) => void;
+}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, draggable, onDragDown, onDragMove, onDragUp }) => {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     if (!ip) return;
@@ -478,9 +544,15 @@ const IfLabel: React.FC<{
 
   return (
     <div
+      className={draggable ? 'nodrag nopan' : undefined}
+      onPointerDown={draggable ? onDragDown : undefined}
+      onPointerMove={draggable ? onDragMove : undefined}
+      onPointerUp={draggable ? onDragUp : undefined}
+      title={draggable ? 'Arraste para reposicionar o card' : undefined}
       style={{
         position: 'absolute',
         transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`,
+        cursor: draggable ? 'grab' : undefined,
         // em (não px): acompanha a opção "Escala da fonte" do painel (TV de NOC)
         fontSize: '0.65em',
         color,

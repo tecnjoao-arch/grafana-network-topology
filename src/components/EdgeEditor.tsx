@@ -62,6 +62,8 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
   const [showSeries, setShowSeries] = useState(false);
   // Texto da capacidade fixa (só grava quando o usuário digita)
   const [speedText, setSpeedText] = useState('');
+  // Thresholds ativos = cor/animação manuais viram só reserva (quando nenhuma regra casa)
+  const thresholdsActive = !!(data.statusBinding?.match && (data.colorMappings?.length ?? 0) > 0);
 
   const patchBinding = (
     key:
@@ -105,7 +107,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
         position: 'fixed',
         top: 70,
         right: 20,
-        width: 290,
+        width: 340,
         maxHeight: 'calc(100vh - 90px)',
         overflowY: 'auto',
         background: '#0f172a',
@@ -138,8 +140,21 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
       </div>
 
       <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Aviso: thresholds mandam na cor/animação */}
+        {thresholdsActive && (
+          <div style={{
+            background: 'rgba(59,130,246,0.08)', border: '1px solid #1d4ed8', borderRadius: 6,
+            padding: '8px 10px', fontSize: 11, color: '#93c5fd', lineHeight: 1.5,
+          }}>
+            🎛️ Os <b>Thresholds</b> (regras abaixo) estão controlando a cor e a animação
+            desta linha. "Cor da linha" e "Animação" valem só como <b>reserva</b>, quando
+            nenhuma regra casar.
+          </div>
+        )}
+
         {/* Cor */}
-        <Section title="Cor da linha">
+        <div style={thresholdsActive ? { opacity: 0.5 } : undefined}>
+        <Section title={thresholdsActive ? 'Cor da linha (reserva)' : 'Cor da linha'}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
             {PRESET_COLORS.map((c) => (
               <button
@@ -169,6 +184,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
             <button onClick={() => onChange({ color: undefined })} title="Voltar à cor automática (status)" style={btnReset}>auto</button>
           </div>
         </Section>
+        </div>
 
         {/* Traçado */}
         <Section title="Traçado">
@@ -203,7 +219,8 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
         </Section>
 
         {/* Animação */}
-        <Section title="Animação">
+        <div style={thresholdsActive ? { opacity: 0.5 } : undefined}>
+        <Section title={thresholdsActive ? 'Animação (reserva)' : 'Animação'}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {LINE_ANIMATIONS.map((a) => (
               <Chip key={a} active={(data.animation ?? 'none') === a} onClick={() => onChange({ animation: a })}>
@@ -212,6 +229,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
             ))}
           </div>
         </Section>
+        </div>
 
         {/* Espessura */}
         <Section title={`Espessura: ${data.lineWidth ?? 'auto'}`}>
@@ -334,6 +352,15 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
             onChange={(e) => onChange({ targetInterface: e.target.value })}
             style={{ ...inputText, width: '100%' }}
           />
+          {(data.sourceLabelOffset || data.targetLabelOffset) && (
+            <button
+              onClick={() => onChange({ sourceLabelOffset: undefined, targetLabelOffset: undefined })}
+              title="Volta os cards para a posição automática na linha"
+              style={{ ...btnReset, width: '100%', marginTop: 6 }}
+            >
+              ↩ Resetar posição dos cards
+            </button>
+          )}
         </Section>
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>

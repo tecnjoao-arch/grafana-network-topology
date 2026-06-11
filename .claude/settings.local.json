@@ -16,7 +16,8 @@
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: trafego global cai pros bindings por lado \\(tooltip/util mostravam '\\\\''-'\\\\''\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: sugestoes de binding incluem series de texto *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: '\\\\''Escala da fonte'\\\\'' agora escala os cards de interface e os icones dos nos *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: modal com trafego por lado + grafico historico real + capacidade fixa *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: modal com trafego por lado + grafico historico real + capacidade fixa *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: cards arrastaveis, snap magnetico em waypoints, editor mais largo e ciente dos thresholds *)"
     ]
   }
 }

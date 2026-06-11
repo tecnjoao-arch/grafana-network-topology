@@ -138,6 +138,9 @@ export interface LinkEdgeData {
   targetAnchor?: { x: number; y: number };
   /** Pontos de dobra manuais (coordenadas do flow). Vazio = linha reta/automática */
   waypoints?: Array<{ x: number; y: number }>;
+  /** Deslocamento manual do card de interface (arrastável no modo edição) */
+  sourceLabelOffset?: { x: number; y: number };
+  targetLabelOffset?: { x: number; y: number };
   /** Binding: tráfego de upload (bps) vindo de uma série */
   trafficUpBinding?: MetricBinding;
   /** Binding: tráfego de download (bps) */
