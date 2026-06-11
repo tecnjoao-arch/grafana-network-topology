@@ -1,6 +1,13 @@
 // utils/dataBinding.ts — Resolve um valor numérico a partir das séries do Grafana
 // (DataFrame[]) usando um matcher de texto/regex + agregação.
 // Genérico: funciona com Zabbix, Prometheus, Loki, etc.
+//
+// Performance: o painel re-renderiza a CADA tecla/arrasto no modo edição, e cada
+// render resolve dezenas de bindings sobre o mesmo DataFrame[]. Por isso tudo é
+// indexado uma única vez por chegada de dados (WeakMap na referência do array):
+// strings de identificação pré-construídas, maior timestamp global e cache de
+// resultado por binding. Sem isso, painéis com centenas de séries travavam o
+// navegador durante a edição.
 
 import { DataFrame, Field } from '@grafana/data';
 
@@ -20,6 +27,12 @@ export interface MetricBinding {
   match: string;
   /** Como reduzir a série temporal a um número (padrão: last) */
   aggregation?: Aggregation;
+}
+
+/** Série temporal completa (tempo+valor) de um binding — para gráficos. */
+export interface BindingSeries {
+  times: number[];
+  values: number[];
 }
 
 /** Constrói uma string "pesquisável" que identifica uma série/campo. */
@@ -49,29 +62,31 @@ function reduce(values: number[], agg: Aggregation): number | undefined {
   }
 }
 
-/** Lista identificadores legíveis de todas as séries (pra ajudar o usuário a escrever o match). */
-export function listSeriesKeys(series: DataFrame[]): string[] {
-  const keys = new Set<string>();
-  for (const frame of series) {
-    for (const field of frame.fields) {
-      // Inclui campos de texto: os bindings de IP (resolveTextBinding) procuram
-      // em séries string — elas também precisam aparecer nas sugestões.
-      if (field.type === 'number' || field.type === 'string') {
-        keys.add(haystack(frame, field));
-      }
-    }
-  }
-  return Array.from(keys);
+// ── Índice por referência do DataFrame[] ──────────────────────────────────────
+
+interface IndexedField {
+  hay: string;
+  hayLower: string;
+  refId: string;
+  isNumber: boolean;
+  field: Field;
+  timeField?: Field;
 }
 
-// Cache do maior timestamp por referência do array de séries. Cada render do
-// painel resolve dezenas de bindings sobre o MESMO `series`; sem cache, cada
-// um re-escaneava todos os campos de tempo (O(séries × pontos × bindings)).
-const maxTimeCache = new WeakMap<DataFrame[], number>();
+interface SeriesIndex {
+  fields: IndexedField[];
+  maxTime: number;
+  /** Cache de resultado por binding (chave inclui match/agg/query/staleMs) */
+  results: Map<string, unknown>;
+}
 
-function getGlobalMaxTime(series: DataFrame[]): number {
-  const cached = maxTimeCache.get(series);
-  if (cached !== undefined) return cached;
+const indexCache = new WeakMap<DataFrame[], SeriesIndex>();
+
+function getIndex(series: DataFrame[]): SeriesIndex {
+  let idx = indexCache.get(series);
+  if (idx) return idx;
+
+  const fields: IndexedField[] = [];
   let maxTime = 0;
   for (const frame of series) {
     const timeField = frame.fields.find((f) => f.type === 'time');
@@ -79,153 +94,166 @@ function getGlobalMaxTime(series: DataFrame[]): number {
       const vals = timeField.values as unknown as any[];
       for (const val of vals) {
         const num = Number(val);
-        if (typeof num === 'number' && !isNaN(num) && num > maxTime) {
-          maxTime = num;
-        }
+        if (!isNaN(num) && num > maxTime) maxTime = num;
       }
     }
+    for (const field of frame.fields) {
+      if (field.type !== 'number' && field.type !== 'string') continue;
+      const hay = haystack(frame, field);
+      fields.push({
+        hay,
+        hayLower: hay.toLowerCase(),
+        refId: frame.refId ?? '',
+        isNumber: field.type === 'number',
+        field,
+        timeField,
+      });
+    }
   }
-  maxTimeCache.set(series, maxTime);
-  return maxTime;
+  idx = { fields, maxTime, results: new Map() };
+  indexCache.set(series, idx);
+  return idx;
+}
+
+/** Matcher: substring literal PRIMEIRO, regex como fallback. Nomes de itens do
+ *  Zabbix costumam conter parênteses (ex: "Rx Power (dBm)"), que como regex
+ *  viram grupos e nunca casam — colar o nome exato da série sempre funciona. */
+function makeMatcher(match: string): (f: IndexedField) => boolean {
+  let re: RegExp | null = null;
+  try {
+    re = new RegExp(match, 'i');
+  } catch {
+    re = null; // match inválido como regex → só substring
+  }
+  const lowerMatch = match.toLowerCase();
+  return (f) => f.hayLower.includes(lowerMatch) || (re ? re.test(f.hay) : false);
+}
+
+/** Lista identificadores legíveis de todas as séries (números e texto). */
+export function listSeriesKeys(series: DataFrame[]): string[] {
+  const keys = new Set<string>();
+  for (const f of getIndex(series).fields) keys.add(f.hay);
+  return Array.from(keys);
 }
 
 /** Resolve o valor numérico de um binding. undefined se nada casar. */
 export function resolveBinding(series: DataFrame[], binding?: MetricBinding): number | undefined {
   if (!binding || !binding.match || series.length === 0) return undefined;
 
-  let re: RegExp | null = null;
-  try {
-    re = new RegExp(binding.match, 'i');
-  } catch {
-    re = null; // match inválido como regex → só substring
-  }
-  // Substring literal PRIMEIRO, regex como fallback: nomes de itens do Zabbix
-  // costumam conter parênteses (ex: "Rx Power (dBm)"), que como regex viram
-  // grupos e nunca casam. Assim, colar o nome exato da série sempre funciona.
-  const lowerMatch = binding.match.toLowerCase();
-  const matches = (h: string) =>
-    h.toLowerCase().includes(lowerMatch) || (re ? re.test(h) : false);
-
+  const idx = getIndex(series);
   const agg = binding.aggregation ?? 'last';
-  const globalMaxTime = getGlobalMaxTime(series);
+  const cacheKey = `n|${binding.query ?? ''}|${agg}|${defaultStaleMs}|${binding.match}`;
+  if (idx.results.has(cacheKey)) return idx.results.get(cacheKey) as number | undefined;
 
-  for (const frame of series) {
-    if (binding.query && (frame.refId ?? '') !== binding.query) continue;
-    for (const field of frame.fields) {
-      if (field.type !== 'number') continue;
-      if (!matches(haystack(frame, field))) continue;
-      
-      const vals = (field.values as unknown as any[]).map((x) => Number(x));
-      
-      // Checar se o dado está obsoleto (stale) comparando com o timestamp máximo global.
-      // Só se aplica a 'last' (valor "agora"); agregações de janela (avg/max/min/first)
-      // continuam válidas mesmo que o último ponto seja antigo.
-      const timeField = frame.fields.find((f) => f.type === 'time');
-      if (agg === 'last' && defaultStaleMs > 0 && timeField && globalMaxTime > 0) {
-        const timeVals = timeField.values as unknown as any[];
-        let lastIdx = -1;
-        for (let i = vals.length - 1; i >= 0; i--) {
-          if (typeof vals[i] === 'number' && !isNaN(vals[i])) {
-            lastIdx = i;
-            break;
-          }
-        }
-        if (lastIdx !== -1) {
-          const tVal = Number(timeVals[lastIdx]);
-          // Tolerância respeita o intervalo de coleta DESTA série: uma métrica de
-          // 5 min não pode parecer obsoleta só porque outra série atualiza a cada 30s.
-          const tFirst = Number(timeVals[0]);
-          const interval = (lastIdx > 0 && !isNaN(tFirst) && !isNaN(tVal)) ? (tVal - tFirst) / lastIdx : 0;
-          const tolerance = Math.max(defaultStaleMs, interval * 2.5);
-          if (!isNaN(tVal) && (globalMaxTime - tVal > tolerance)) {
-            return undefined; // Considera obsoleto (não resolve valor, forçando queda no status)
-          }
+  const matches = makeMatcher(binding.match);
+  let out: number | undefined = undefined;
+
+  for (const f of idx.fields) {
+    if (!f.isNumber) continue;
+    if (binding.query && f.refId !== binding.query) continue;
+    if (!matches(f)) continue;
+
+    const vals = (f.field.values as unknown as any[]).map((x) => Number(x));
+
+    // Checar se o dado está obsoleto (stale) comparando com o timestamp máximo global.
+    // Só se aplica a 'last' (valor "agora"); agregações de janela (avg/max/min/first)
+    // continuam válidas mesmo que o último ponto seja antigo.
+    if (agg === 'last' && defaultStaleMs > 0 && f.timeField && idx.maxTime > 0) {
+      const timeVals = f.timeField.values as unknown as any[];
+      let lastIdx = -1;
+      for (let i = vals.length - 1; i >= 0; i--) {
+        if (typeof vals[i] === 'number' && !isNaN(vals[i])) {
+          lastIdx = i;
+          break;
         }
       }
+      if (lastIdx !== -1) {
+        const tVal = Number(timeVals[lastIdx]);
+        // Tolerância respeita o intervalo de coleta DESTA série: uma métrica de
+        // 5 min não pode parecer obsoleta só porque outra série atualiza a cada 30s.
+        const tFirst = Number(timeVals[0]);
+        const interval = (lastIdx > 0 && !isNaN(tFirst) && !isNaN(tVal)) ? (tVal - tFirst) / lastIdx : 0;
+        const tolerance = Math.max(defaultStaleMs, interval * 2.5);
+        if (!isNaN(tVal) && (idx.maxTime - tVal > tolerance)) {
+          break; // Obsoleto: não resolve valor (força queda no status)
+        }
+      }
+    }
 
-      const out = reduce(vals, agg);
-      if (out !== undefined) return out;
+    const reduced = reduce(vals, agg);
+    if (reduced !== undefined) {
+      out = reduced;
+      break;
     }
   }
-  return undefined;
-}
 
-/** Série temporal completa (tempo+valor) de um binding — para gráficos. */
-export interface BindingSeries {
-  times: number[];
-  values: number[];
+  idx.results.set(cacheKey, out);
+  return out;
 }
 
 export function resolveBindingSeries(series: DataFrame[], binding?: MetricBinding): BindingSeries | undefined {
   if (!binding || !binding.match || series.length === 0) return undefined;
 
-  let re: RegExp | null = null;
-  try {
-    re = new RegExp(binding.match, 'i');
-  } catch {
-    re = null;
-  }
-  const lowerMatch = binding.match.toLowerCase();
-  const matches = (h: string) =>
-    h.toLowerCase().includes(lowerMatch) || (re ? re.test(h) : false);
+  const idx = getIndex(series);
+  const cacheKey = `s|${binding.query ?? ''}|${binding.match}`;
+  if (idx.results.has(cacheKey)) return idx.results.get(cacheKey) as BindingSeries | undefined;
 
-  for (const frame of series) {
-    if (binding.query && (frame.refId ?? '') !== binding.query) continue;
-    const timeField = frame.fields.find((f) => f.type === 'time');
-    if (!timeField) continue;
-    for (const field of frame.fields) {
-      if (field.type !== 'number') continue;
-      if (!matches(haystack(frame, field))) continue;
-      const rawV = field.values as unknown as any[];
-      const rawT = timeField.values as unknown as any[];
-      const times: number[] = [];
-      const values: number[] = [];
-      for (let i = 0; i < rawV.length; i++) {
-        const v = Number(rawV[i]);
-        const t = Number(rawT[i]);
-        if (!isNaN(v) && !isNaN(t)) {
-          times.push(t);
-          values.push(v);
-        }
+  const matches = makeMatcher(binding.match);
+  let out: BindingSeries | undefined = undefined;
+
+  for (const f of idx.fields) {
+    if (!f.isNumber || !f.timeField) continue;
+    if (binding.query && f.refId !== binding.query) continue;
+    if (!matches(f)) continue;
+    const rawV = f.field.values as unknown as any[];
+    const rawT = f.timeField.values as unknown as any[];
+    const times: number[] = [];
+    const values: number[] = [];
+    for (let i = 0; i < rawV.length; i++) {
+      const v = Number(rawV[i]);
+      const t = Number(rawT[i]);
+      if (!isNaN(v) && !isNaN(t)) {
+        times.push(t);
+        values.push(v);
       }
-      if (values.length) return { times, values };
+    }
+    if (values.length) {
+      out = { times, values };
+      break;
     }
   }
-  return undefined;
+
+  idx.results.set(cacheKey, out);
+  return out;
 }
 
 /** Resolve o valor textual de um binding (útil para extrair IPs ou status em texto). */
 export function resolveTextBinding(series: DataFrame[], binding?: MetricBinding): string | undefined {
   if (!binding || !binding.match || series.length === 0) return undefined;
 
-  let re: RegExp | null = null;
-  try {
-    re = new RegExp(binding.match, 'i');
-  } catch {
-    re = null;
-  }
-  // Mesma regra do resolveBinding: literal primeiro, regex como fallback.
-  const lowerMatch = binding.match.toLowerCase();
-  const matches = (h: string) =>
-    h.toLowerCase().includes(lowerMatch) || (re ? re.test(h) : false);
+  const idx = getIndex(series);
+  const cacheKey = `t|${binding.query ?? ''}|${binding.match}`;
+  if (idx.results.has(cacheKey)) return idx.results.get(cacheKey) as string | undefined;
 
-  for (const frame of series) {
-    if (binding.query && (frame.refId ?? '') !== binding.query) continue;
-    for (const field of frame.fields) {
-      if (field.type !== 'string') continue; // Apenas procura em campos de texto
-      if (!matches(haystack(frame, field))) continue;
-      
-      const vals = field.values as unknown as string[];
-      // Pegar o último valor válido não vazio
-      let lastVal: string | undefined = undefined;
-      for (let i = vals.length - 1; i >= 0; i--) {
-        if (vals[i] !== null && vals[i] !== undefined && vals[i] !== '') {
-          lastVal = String(vals[i]);
-          break;
-        }
+  const matches = makeMatcher(binding.match);
+  let out: string | undefined = undefined;
+
+  for (const f of idx.fields) {
+    if (f.isNumber) continue; // Apenas procura em campos de texto
+    if (binding.query && f.refId !== binding.query) continue;
+    if (!matches(f)) continue;
+
+    const vals = f.field.values as unknown as string[];
+    // Pegar o último valor válido não vazio
+    for (let i = vals.length - 1; i >= 0; i--) {
+      if (vals[i] !== null && vals[i] !== undefined && vals[i] !== '') {
+        out = String(vals[i]);
+        break;
       }
-      if (lastVal !== undefined) return lastVal;
     }
+    if (out !== undefined) break;
   }
-  return undefined;
+
+  idx.results.set(cacheKey, out);
+  return out;
 }
