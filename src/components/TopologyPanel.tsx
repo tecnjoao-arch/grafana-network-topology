@@ -5,7 +5,7 @@ import React, { useMemo, useEffect, useState, useCallback, useRef } from 'react'
 import { PanelProps } from '@grafana/data';
 import {
   ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, ControlButton, MiniMap,
-  useNodesState, useEdgesState, useReactFlow,
+  useNodesState, useEdgesState, useReactFlow, getNodesBounds,
   Node, Edge, NodeChange, Connection, OnConnectStart,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -401,17 +401,27 @@ const TopologyInner: React.FC<InnerProps> = ({
   const seriesKeys = useMemo(() => listSeriesKeys(data?.series ?? []), [data?.series]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const { fitView } = useReactFlow();
+  const { fitView, fitBounds } = useReactFlow();
 
   const [hover, setHover] = useState<HoverState | null>(null);
   const [clicked, setClicked] = useState<ClickState | null>(null);
   // Painel travado: bloqueia zoom/pan (útil em TV de NOC, evita zoom acidental)
   const [locked, setLocked] = useState(false);
 
-  // Padding do fit-view cresce com a escala da fonte: labels maiores precisam de
-  // mais margem pra não ficarem cortados nas bordas (os cards das interfaces
-  // estendem além dos nós, que é o que o fitView mede).
-  const fitPadding = Math.min(0.5, 0.18 + Math.max(0, (options.fontScale ?? 1) - 1) * 0.12);
+  // Fit-view que PREENCHE a tela: o fitView padrão mede só os nós e deixa muita
+  // margem. Aqui medimos o bounding box dos nós, reservamos uma margem (em
+  // unidades de flow) proporcional à escala da fonte pros cards das interfaces
+  // que estendem além dos nós, e damos zoom bem justo (padding 0.02).
+  const fitToContent = useCallback((duration = 300) => {
+    if (!nodes.length) return;
+    const b = getNodesBounds(nodes);
+    if (!b.width || !b.height) return;
+    const m = 45 * (options.fontScale ?? 1) + 25; // reserva pros labels
+    fitBounds(
+      { x: b.x - m, y: b.y - m, width: b.width + m * 2, height: b.height + m * 2 },
+      { padding: 0.02, duration }
+    );
+  }, [nodes, options.fontScale, fitBounds]);
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
 
@@ -670,10 +680,10 @@ const TopologyInner: React.FC<InnerProps> = ({
   // Re-fit ao redimensionar (importante pra TV)
   useEffect(() => {
     if (options.fitView && !options.editMode) {
-      const t = setTimeout(() => fitView({ padding: fitPadding, duration: 300 }), 80);
+      const t = setTimeout(() => fitToContent(300), 80);
       return () => clearTimeout(t);
     }
-  }, [width, height, options.fitView, options.editMode, fitView, fitPadding]);
+  }, [width, height, options.fitView, options.editMode, fitToContent]);
 
   // Em modo edição: salva posições quando o usuário termina de arrastar
   const lastSavedPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
@@ -760,7 +770,7 @@ const TopologyInner: React.FC<InnerProps> = ({
         edgeTypes={edgeTypes}
         connectionMode={'loose' as any}
         fitView={options.fitView && !options.editMode}
-        fitViewOptions={{ padding: fitPadding }}
+        fitViewOptions={{ padding: 0.1 }}
         proOptions={{ hideAttribution: true }}
         nodesDraggable={!!options.editMode}
         nodesConnectable={!!options.editMode}
@@ -782,7 +792,10 @@ const TopologyInner: React.FC<InnerProps> = ({
         snapGrid={[15, 15]}
       >
         <Background variant={BackgroundVariant.Lines} color={options.theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)'} gap={options.editMode ? 15 : 30} />
-        <Controls showInteractive={false} fitViewOptions={{ padding: fitPadding, duration: 300 }}>
+        <Controls showInteractive={false} showFitView={false}>
+          <ControlButton onClick={() => fitToContent(300)} title="Ajustar à tela (preencher)">
+            <span style={{ fontSize: 14, lineHeight: 1 }}>⛶</span>
+          </ControlButton>
           {!options.editMode && (
             <ControlButton
               onClick={() => setLocked((l) => !l)}
