@@ -39,6 +39,7 @@ export interface ValueMapping {
   value: string;             // Valor esperado (ex: "0", "1", "OK", "DOWN")
   color: string;             // Cor associada (ex: "#FF0000")
   animation?: LineAnimation; // Animação associada (para cabos)
+  lineStyle?: LineStyle;     // Traçado associado (sólida/tracejada/etc — para cabos)
 }
 
 /** Traçado da linha */

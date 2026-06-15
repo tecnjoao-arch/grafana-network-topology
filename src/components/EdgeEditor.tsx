@@ -398,68 +398,71 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
             />
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {/* Cabeçalho da tabela de Thresholds */}
-              <div style={{ display: 'grid', gridTemplateColumns: '24px 1fr 34px 80px 24px', gap: 4, alignItems: 'center', fontSize: 10, color: '#64748b', fontWeight: 'bold', padding: '0 4px' }}>
-                <div>Rem</div>
-                <div>Valor Limite</div>
-                <div>Cor</div>
-                <div>Animação</div>
-                <div>Lvl</div>
-              </div>
+              {(data.colorMappings ?? []).map((mapping, idx) => {
+                const patch = (p: Partial<typeof mapping>) => {
+                  const list = [...(data.colorMappings ?? [])];
+                  list[idx] = { ...list[idx], ...p };
+                  onChange({ colorMappings: list });
+                };
+                return (
+                  <div key={idx} style={{ background: '#1e293b', padding: 6, borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {/* Linha 1: nível · valor · cor · remover */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '20px 1fr 26px 22px', gap: 6, alignItems: 'center' }}>
+                      <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 11, color: '#3b82f6' }} title="Nível (ordem)">{idx}</div>
+                      <input
+                        type="text"
+                        placeholder="Valor (ex: 1, 2, DOWN)"
+                        value={mapping.value}
+                        onChange={(e) => patch({ value: e.target.value })}
+                        style={{ ...inputText, width: '100%', padding: '3px 4px', fontSize: 11 }}
+                      />
+                      <input
+                        type="color"
+                        value={mapping.color}
+                        onChange={(e) => patch({ color: e.target.value })}
+                        title="Cor da linha quando esta regra casa"
+                        style={{ width: 24, height: 22, cursor: 'pointer', border: 'none', background: 'transparent', padding: 0 }}
+                      />
+                      <button
+                        onClick={() => onChange({ colorMappings: (data.colorMappings ?? []).filter((_, i) => i !== idx) })}
+                        style={{ ...btnReset, borderColor: '#ef4444', color: '#ef4444', padding: '2px', textAlign: 'center', width: '100%', fontSize: 10 }}
+                        title="Remover regra"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {/* Linha 2: traçado · animação */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, alignItems: 'center' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ fontSize: 9, color: '#64748b', width: 36 }}>Traçado</span>
+                        <select
+                          value={mapping.lineStyle ?? ''}
+                          onChange={(e) => patch({ lineStyle: (e.target.value || undefined) as any })}
+                          style={{ ...inputText, width: '100%', cursor: 'pointer', padding: '2px 4px', fontSize: 11 }}
+                        >
+                          <option value="">— manter —</option>
+                          {LINE_STYLES.map((s) => (
+                            <option key={s} value={s}>{STYLE_LABEL[s]}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ fontSize: 9, color: '#64748b', width: 30 }}>Anim.</span>
+                        <select
+                          value={mapping.animation ?? 'none'}
+                          onChange={(e) => patch({ animation: e.target.value as any })}
+                          style={{ ...inputText, width: '100%', cursor: 'pointer', padding: '2px 4px', fontSize: 11 }}
+                        >
+                          {LINE_ANIMATIONS.map((anim) => (
+                            <option key={anim} value={anim}>{ANIM_LABEL[anim]}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
 
-              {(data.colorMappings ?? []).map((mapping, idx) => (
-                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 34px 80px 24px', gap: 4, alignItems: 'center', background: '#1e293b', padding: 4, borderRadius: 4 }}>
-                  <button
-                    onClick={() => {
-                      const list = (data.colorMappings ?? []).filter((_, i) => i !== idx);
-                      onChange({ colorMappings: list });
-                    }}
-                    style={{ ...btnReset, borderColor: '#ef4444', color: '#ef4444', padding: '2px', textAlign: 'center', width: '100%', fontSize: 10 }}
-                  >
-                    ✕
-                  </button>
-                  <input
-                    type="text"
-                    placeholder="Valor"
-                    value={mapping.value}
-                    onChange={(e) => {
-                      const list = [...(data.colorMappings ?? [])];
-                      list[idx] = { ...list[idx], value: e.target.value };
-                      onChange({ colorMappings: list });
-                    }}
-                    style={{ ...inputText, width: '100%', padding: '3px 4px', fontSize: 11 }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <input
-                      type="color"
-                      value={mapping.color}
-                      onChange={(e) => {
-                        const list = [...(data.colorMappings ?? [])];
-                        list[idx] = { ...list[idx], color: e.target.value };
-                        onChange({ colorMappings: list });
-                      }}
-                      style={{ width: 20, height: 20, cursor: 'pointer', border: 'none', background: 'transparent', padding: 0 }}
-                    />
-                  </div>
-                  <select
-                    value={mapping.animation ?? 'none'}
-                    onChange={(e) => {
-                      const list = [...(data.colorMappings ?? [])];
-                      list[idx] = { ...list[idx], animation: e.target.value as any };
-                      onChange({ colorMappings: list });
-                    }}
-                    style={{ ...inputText, width: '100%', cursor: 'pointer', padding: '2px 4px', fontSize: 11 }}
-                  >
-                    {LINE_ANIMATIONS.map(anim => (
-                      <option key={anim} value={anim}>{ANIM_LABEL[anim]}</option>
-                    ))}
-                  </select>
-                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 11, color: '#3b82f6' }}>
-                    {idx}
-                  </div>
-                </div>
-              ))}
-              
               <button
                 onClick={() => {
                   const list = [...(data.colorMappings ?? []), { value: '', color: '#ef4444', animation: 'flow' as const }];

@@ -224,7 +224,11 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
   // Para evitar sobreposição, aumentamos a distância OFF se o comprimento total do cabo for suficiente,
   // ou ajustamos dinamicamente com base na proximidade.
   const totalLength = points.reduce((acc, p, idx) => idx === 0 ? 0 : acc + Math.hypot(p.x - points[idx - 1].x, p.y - points[idx - 1].y), 0);
-  const OFF = totalLength < 160 ? Math.max(30, totalLength * 0.28) : 58;
+  const OFFbase = totalLength < 160 ? Math.max(30, totalLength * 0.28) : 58;
+  // Escala da fonte aumenta o card; o afastamento precisa crescer junto, senão os
+  // labels colidem e a linha parece "torta". Cap em ~45% do cabo p/ não cruzar o meio.
+  const fontScale = ((data as any)?.fontScale as number) ?? 1;
+  const OFF = Math.min(OFFbase * fontScale, totalLength * 0.45);
   
   // Posição final do card = ponto na linha + deslocamento manual (arrastável)
   const srcLabelPos = { x: sp.x + s1.ux * OFF + (localSrcOff?.x ?? 0), y: sp.y + s1.uy * OFF + (localSrcOff?.y ?? 0) };

@@ -4,7 +4,7 @@
 import React, { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { PanelProps } from '@grafana/data';
 import {
-  ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, MiniMap,
+  ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, ControlButton, MiniMap,
   useNodesState, useEdgesState, useReactFlow,
   Node, Edge, NodeChange, Connection, OnConnectStart,
 } from '@xyflow/react';
@@ -276,6 +276,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
       const liveStatusVal = resolveBinding(series, e.data.statusBinding);
       let edgeColor = e.data.color;
       let edgeAnim = e.data.animation;
+      let edgeLineStyle = e.data.lineStyle;
       let edgeStatus = hasBinding ? (resolved ? 'up' : 'unknown') : e.data.status;
 
       if (e.data.statusBinding && liveStatusVal !== undefined) {
@@ -287,6 +288,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
           if (matched) {
             edgeColor = matched.color;
             edgeAnim = matched.animation ?? 'none';
+            if (matched.lineStyle) edgeLineStyle = matched.lineStyle; // traçado por regra
             edgeStatus = 'up'; // Mark as up to apply color and animation properly
           } else {
             edgeStatus = 'unknown'; // Gray/unknown if status metric is resolved but no rule matches
@@ -338,8 +340,12 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         hideTrafficBox: hideTrafficCards,
         color: edgeColor,
         animation: edgeAnim,
+        lineStyle: edgeLineStyle,
         status: edgeStatus,
-      };
+        // Escala da fonte injetada: o card (LinkEdge) usa pra afastar os labels
+        // proporcionalmente, senão eles colidem ao aumentar a escala.
+        fontScale: options.fontScale ?? 1,
+      } as LinkEdgeData;
       return {
         id: e.id,
         source: e.source,
@@ -399,6 +405,13 @@ const TopologyInner: React.FC<InnerProps> = ({
 
   const [hover, setHover] = useState<HoverState | null>(null);
   const [clicked, setClicked] = useState<ClickState | null>(null);
+  // Painel travado: bloqueia zoom/pan (útil em TV de NOC, evita zoom acidental)
+  const [locked, setLocked] = useState(false);
+
+  // Padding do fit-view cresce com a escala da fonte: labels maiores precisam de
+  // mais margem pra não ficarem cortados nas bordas (os cards das interfaces
+  // estendem além dos nós, que é o que o fitView mede).
+  const fitPadding = Math.min(0.5, 0.18 + Math.max(0, (options.fontScale ?? 1) - 1) * 0.12);
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
 
@@ -657,10 +670,10 @@ const TopologyInner: React.FC<InnerProps> = ({
   // Re-fit ao redimensionar (importante pra TV)
   useEffect(() => {
     if (options.fitView && !options.editMode) {
-      const t = setTimeout(() => fitView({ padding: 0.18, duration: 300 }), 80);
+      const t = setTimeout(() => fitView({ padding: fitPadding, duration: 300 }), 80);
       return () => clearTimeout(t);
     }
-  }, [width, height, options.fitView, options.editMode, fitView]);
+  }, [width, height, options.fitView, options.editMode, fitView, fitPadding]);
 
   // Em modo edição: salva posições quando o usuário termina de arrastar
   const lastSavedPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
@@ -747,13 +760,15 @@ const TopologyInner: React.FC<InnerProps> = ({
         edgeTypes={edgeTypes}
         connectionMode={'loose' as any}
         fitView={options.fitView && !options.editMode}
-        fitViewOptions={{ padding: 0.18 }}
+        fitViewOptions={{ padding: fitPadding }}
         proOptions={{ hideAttribution: true }}
         nodesDraggable={!!options.editMode}
         nodesConnectable={!!options.editMode}
         elementsSelectable={true}
-        panOnDrag={true}
-        zoomOnScroll={true}
+        panOnDrag={options.editMode || !locked}
+        zoomOnScroll={options.editMode || !locked}
+        zoomOnPinch={options.editMode || !locked}
+        zoomOnDoubleClick={options.editMode || !locked}
         minZoom={0.15}
         maxZoom={4}
         onEdgeMouseEnter={onEdgeMouseEnter}
@@ -767,7 +782,16 @@ const TopologyInner: React.FC<InnerProps> = ({
         snapGrid={[15, 15]}
       >
         <Background variant={BackgroundVariant.Lines} color={options.theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)'} gap={options.editMode ? 15 : 30} />
-        <Controls showInteractive={false} />
+        <Controls showInteractive={false} fitViewOptions={{ padding: fitPadding, duration: 300 }}>
+          {!options.editMode && (
+            <ControlButton
+              onClick={() => setLocked((l) => !l)}
+              title={locked ? 'Destravar painel (zoom/pan)' : 'Travar painel (sem zoom/pan)'}
+            >
+              <span style={{ fontSize: 14, lineHeight: 1 }}>{locked ? '🔒' : '🔓'}</span>
+            </ControlButton>
+          )}
+        </Controls>
         {options.showMinimap && (
           <MiniMap
             nodeColor={(n) => (n.data as any)?.status === 'down' ? '#ef4444' : '#22d3ee'}
