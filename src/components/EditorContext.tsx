@@ -21,6 +21,9 @@ interface EditorCtx {
   deleteNode: (nodeId: string) => void;
   /** Duplica um nó */
   duplicateNode?: (nodeId: string) => void;
+  /** Fora do modo edição: abre o modal de detalhes do link, opcionalmente
+   *  focado num lado (interface) específico. */
+  openLinkDetails?: (edgeId: string, side?: 'source' | 'target') => void;
 }
 
 const Ctx = createContext<EditorCtx>({
@@ -32,6 +35,7 @@ const Ctx = createContext<EditorCtx>({
   setNodeData: () => {},
   deleteNode: () => {},
   duplicateNode: () => {},
+  openLinkDetails: () => {},
 });
 
 export const EditorProvider: React.FC<{ value: EditorCtx; children: React.ReactNode }> = ({ value, children }) => (

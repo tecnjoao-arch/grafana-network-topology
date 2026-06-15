@@ -1,10 +1,12 @@
-// components/LinkDetailsModal.tsx — Modal exibido ao clicar numa aresta.
-// Mostra detalhes do link + placeholder pra gráfico de tráfego histórico.
+// components/LinkDetailsModal.tsx — Modal exibido ao clicar numa aresta ou num card.
+// • Clique na LINHA → visão geral do link (os dois lados).
+// • Clique num CARD de interface → foco naquela interface específica (focusSide).
+// Convenção de cores: Inbound = verde, Outbound = azul.
 
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { DataFrame } from '@grafana/data';
-import { LinkEdgeData } from '../types';
+import { LinkEdgeData, MetricBinding } from '../types';
 import { formatBitsPerSec, linkUtilization } from '../utils/format';
 import { resolveBindingSeries, BindingSeries } from '../utils/dataBinding';
 
@@ -15,269 +17,167 @@ interface Props {
   targetLabel: string;
   /** Séries das queries do painel — usadas pro gráfico histórico */
   series?: DataFrame[];
+  /** Foco numa interface específica (clique num card). Ausente = visão geral. */
+  focusSide?: 'source' | 'target';
   onClose: () => void;
 }
 
-export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLabel, series = [], onClose }) => {
+const IN_COLOR = '#22c55e';   // Inbound (verde)
+const OUT_COLOR = '#3b82f6';  // Outbound (azul)
+
+/** Dados consolidados de um lado (interface) do link. */
+interface SideInfo {
+  label: string;
+  iface?: string;
+  ip?: string;
+  inbound?: number;
+  outbound?: number;
+  errors?: number;
+  domTemp?: number;
+  domVolt?: number;
+  domBias?: number;
+  domTx?: number;
+  domRx?: number;
+  inboundBinding?: MetricBinding;
+  outboundBinding?: MetricBinding;
+}
+
+function getSide(data: LinkEdgeData, which: 'source' | 'target', label: string): SideInfo {
+  if (which === 'source') {
+    return {
+      label,
+      iface: data.sourceInterface,
+      ip: data.sourceIp,
+      inbound: data.sourceTrafficUp ?? data.trafficUp,
+      outbound: data.sourceTrafficDown ?? data.trafficDown,
+      errors: data.sourceErrors,
+      domTemp: data.sourceDomTemp,
+      domVolt: data.sourceDomVolt,
+      domBias: data.sourceDomBias,
+      domTx: data.sourceDomTxPower,
+      domRx: data.sourceDomRxPower,
+      inboundBinding: data.sourceTrafficUpBinding ?? data.trafficUpBinding,
+      outboundBinding: data.sourceTrafficDownBinding ?? data.trafficDownBinding,
+    };
+  }
+  return {
+    label,
+    iface: data.targetInterface,
+    ip: data.targetIp,
+    inbound: data.targetTrafficUp ?? data.trafficDown,
+    outbound: data.targetTrafficDown ?? data.trafficUp,
+    errors: data.targetErrors,
+    domTemp: data.targetDomTemp,
+    domVolt: data.targetDomVolt,
+    domBias: data.targetDomBias,
+    domTx: data.targetDomTxPower,
+    domRx: data.targetDomRxPower,
+    inboundBinding: data.targetTrafficUpBinding ?? data.trafficDownBinding,
+    outboundBinding: data.targetTrafficDownBinding ?? data.trafficUpBinding,
+  };
+}
+
+function hasDom(s: SideInfo): boolean {
+  return s.domTemp !== undefined || s.domVolt !== undefined || s.domBias !== undefined
+    || s.domTx !== undefined || s.domRx !== undefined;
+}
+
+export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLabel, series = [], focusSide, onClose }) => {
   const util = linkUtilization(Math.max(data?.trafficUp ?? 0, data?.trafficDown ?? 0), data?.linkSpeed);
   const utilPct = (util * 100).toFixed(1);
   const status = data?.status ?? 'unknown';
 
-  const [showDom, setShowDom] = React.useState(false);
+  const src = getSide(data, 'source', sourceLabel);
+  const tgt = getSide(data, 'target', targetLabel);
+  const focus = focusSide === 'source' ? src : focusSide === 'target' ? tgt : null;
 
-  // Histórico de tráfego do link no período do dashboard (direção A→B e B→A).
-  // Usa o binding do lado A; sem ele, cai pro global e por fim pro espelho do lado B.
-  const upHist = React.useMemo(
-    () => resolveBindingSeries(series, data.sourceTrafficUpBinding ?? data.trafficUpBinding ?? data.targetTrafficDownBinding),
-    [series, data.sourceTrafficUpBinding, data.trafficUpBinding, data.targetTrafficDownBinding]
+  // Séries históricas (memo): no foco, da interface escolhida; senão, do lado origem.
+  const chartSide = focus ?? src;
+  const inHist = React.useMemo(
+    () => resolveBindingSeries(series, chartSide.inboundBinding),
+    [series, chartSide.inboundBinding]
   );
-  const downHist = React.useMemo(
-    () => resolveBindingSeries(series, data.sourceTrafficDownBinding ?? data.trafficDownBinding ?? data.targetTrafficUpBinding),
-    [series, data.sourceTrafficDownBinding, data.trafficDownBinding, data.targetTrafficUpBinding]
-  );
-
-  // Verifica se existe alguma métrica DOM ativa para exibir o botão
-  const hasDomMetrics = !!(
-    data.sourceDomTemp !== undefined ||
-    data.sourceDomVolt !== undefined ||
-    data.sourceDomBias !== undefined ||
-    data.sourceDomTxPower !== undefined ||
-    data.sourceDomRxPower !== undefined ||
-    data.targetDomTemp !== undefined ||
-    data.targetDomVolt !== undefined ||
-    data.targetDomBias !== undefined ||
-    data.targetDomTxPower !== undefined ||
-    data.targetDomRxPower !== undefined
+  const outHist = React.useMemo(
+    () => resolveBindingSeries(series, chartSide.outboundBinding),
+    [series, chartSide.outboundBinding]
   );
 
   return createPortal(
     <div
       onClick={onClose}
       style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.6)',
-        zIndex: 9999,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 580,
-          maxWidth: '92vw',
-          background: '#0f172a',
-          border: '1px solid #334155',
-          borderRadius: 8,
-          color: '#e2e8f0',
-          fontFamily: 'inherit',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
-          overflow: 'hidden',
+          width: 620, maxWidth: '92vw', background: '#0f172a', border: '1px solid #334155',
+          borderRadius: 10, color: '#e2e8f0', fontFamily: 'inherit',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.7)', overflow: 'hidden',
         }}
       >
         {/* Header */}
         <div
           style={{
-            padding: '12px 16px',
-            borderBottom: '1px solid #334155',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            padding: '14px 18px', borderBottom: '1px solid #334155',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
             background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
           }}
         >
           <div>
-            <div style={{ fontSize: 13, color: '#94a3b8' }}>Detalhes do link</div>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>
-              {sourceLabel} {data.sourceInterface ? `(${data.sourceInterface})` : ''} <span style={{ color: '#475569' }}>↔</span> {targetLabel} {data.targetInterface ? `(${data.targetInterface})` : ''}
+            <div style={{ fontSize: 12, color: '#94a3b8', letterSpacing: 0.4 }}>
+              {focus ? 'Detalhes da interface' : 'Detalhes do link'}
             </div>
+            {focus ? (
+              <div style={{ fontSize: 17, fontWeight: 700 }}>
+                {focus.label}
+                {focus.iface && <span style={{ color: '#22d3ee', fontFamily: 'monospace', marginLeft: 8 }}>{focus.iface}</span>}
+                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 400, marginTop: 2 }}>
+                  link com {focus === src ? targetLabel : sourceLabel}
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 16, fontWeight: 600 }}>
+                {sourceLabel} {data.sourceInterface ? `(${data.sourceInterface})` : ''} <span style={{ color: '#475569' }}>↔</span> {targetLabel} {data.targetInterface ? `(${data.targetInterface})` : ''}
+              </div>
+            )}
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              color: '#94a3b8',
-              border: '1px solid #334155',
-              borderRadius: 4,
-              padding: '4px 10px',
-              cursor: 'pointer',
-              fontSize: 14,
-            }}
-          >
-            ✕
-          </button>
+          <button onClick={onClose} style={btnX}>✕</button>
         </div>
 
-        {/* Corpo */}
-        <div style={{ padding: 16, maxHeight: '80vh', overflowY: 'auto' }}>
-          {/* Status badge */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <StatusBadge status={status} />
-              <UtilBadge pct={utilPct} util={util} />
-            </div>
-            {hasDomMetrics && (
-              <button
-                onClick={() => setShowDom(!showDom)}
-                style={{
-                  background: showDom ? '#8970fa' : 'transparent',
-                  color: '#fff',
-                  border: '1px solid #8970fa',
-                  borderRadius: 4,
-                  padding: '4px 10px',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  transition: 'all 0.2s',
-                }}
-              >
-                {showDom ? '📋 Ocultar Diagnóstico Fibra' : '🧬 Detalhes Diagnóstico DOM Fibra'}
-              </button>
+        <div style={{ padding: 18, maxHeight: '80vh', overflowY: 'auto' }}>
+          {/* Badges */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <StatusBadge status={status} />
+            <UtilBadge pct={utilPct} util={util} />
+            {data.linkSpeed !== undefined && (
+              <span style={badgeNeutral}>Capacidade {formatBitsPerSec(data.linkSpeed)}</span>
             )}
           </div>
 
-          {!showDom ? (
-            <>
-              {/* Tráfego por lado (cada lado mede a própria interface) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 13 }}>
-                <div style={sideBox}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#3b82f6', marginBottom: 8, fontFamily: 'monospace' }}>
-                    {sourceLabel}{data.sourceInterface ? ` · ${data.sourceInterface}` : ''}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    <Field label="Upload" value={formatBitsPerSec(data.sourceTrafficUp ?? data.trafficUp)} color="#22c55e" />
-                    <Field label="Download" value={formatBitsPerSec(data.sourceTrafficDown ?? data.trafficDown)} color="#22d3ee" />
-                  </div>
-                  {data.sourceErrors !== undefined && (
-                    <div style={{ marginTop: 8 }}>
-                      <Field label="Erros" value={String(data.sourceErrors)} color={data.sourceErrors > 0 ? '#ef4444' : '#94a3b8'} />
-                    </div>
-                  )}
-                </div>
-                <div style={sideBox}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#10b981', marginBottom: 8, fontFamily: 'monospace' }}>
-                    {targetLabel}{data.targetInterface ? ` · ${data.targetInterface}` : ''}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    <Field label="Upload" value={formatBitsPerSec(data.targetTrafficUp ?? data.trafficDown)} color="#22c55e" />
-                    <Field label="Download" value={formatBitsPerSec(data.targetTrafficDown ?? data.trafficUp)} color="#22d3ee" />
-                  </div>
-                  {data.targetErrors !== undefined && (
-                    <div style={{ marginTop: 8 }}>
-                      <Field label="Erros" value={String(data.targetErrors)} color={data.targetErrors > 0 ? '#ef4444' : '#94a3b8'} />
-                    </div>
-                  )}
-                </div>
-                <Field label="Capacidade" value={formatBitsPerSec(data.linkSpeed)} color="#94a3b8" />
-                <Field label="Utilização" value={`${utilPct}%`} />
-              </div>
-
-              {/* Gráfico de tráfego histórico (período do dashboard) */}
-              {(upHist || downHist) ? (
-                <div style={{ marginTop: 16 }}>
-                  <TrafficChart up={upHist} down={downHist} />
-                </div>
-              ) : (
-                <div
-                  style={{
-                    marginTop: 16,
-                    padding: 14,
-                    border: '1px dashed #334155',
-                    borderRadius: 6,
-                    background: 'rgba(30, 41, 59, 0.4)',
-                    textAlign: 'center',
-                    color: '#64748b',
-                    fontSize: 12,
-                  }}
-                >
-                  <div style={{ fontSize: 28, marginBottom: 6 }}>📈</div>
-                  <div>Sem histórico para exibir</div>
-                  <div style={{ fontSize: 11, marginTop: 4, color: '#475569' }}>
-                    Configure os bindings de tráfego do link (Lado A/B) no modo edição.
-                  </div>
-                </div>
-              )}
-            </>
+          {focus ? (
+            <FocusedView side={focus} />
           ) : (
-            /* Diagnóstico de Fibra Óptica (DOM) */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 'bold', color: '#8970fa', marginBottom: 2 }}>
-                Tabela de Métricas Ópticas (DOM - Digital Optical Monitoring)
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <SideCard side={src} accent="#3b82f6" />
+              <SideCard side={tgt} accent="#10b981" />
+            </div>
+          )}
+
+          {/* Gráfico histórico */}
+          {(inHist || outHist) ? (
+            <div style={{ marginTop: 16 }}>
+              <TrafficChart inbound={inHist} outbound={outHist} title={focus ? `Histórico · ${focus.iface ?? focus.label}` : 'Histórico no período do dashboard'} />
+            </div>
+          ) : (
+            <div style={emptyChart}>
+              <div style={{ fontSize: 26, marginBottom: 6 }}>📈</div>
+              <div>Sem histórico para exibir</div>
+              <div style={{ fontSize: 11, marginTop: 4, color: '#475569' }}>
+                Configure os bindings de tráfego (Inbound/Outbound) deste link no modo edição.
               </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: '#e2e8f0' }}>
-                <thead>
-                  <tr style={{ background: '#1e293b', borderBottom: '2px solid #334155' }}>
-                    <th style={{ padding: '8px', textAlign: 'left', fontWeight: 'bold' }}>Métrica / Parâmetro</th>
-                    <th style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold' }}>Origem ({data.sourceInterface ?? 'Lado A'})</th>
-                    <th style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold' }}>Destino ({data.targetInterface ?? 'Lado B'})</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                    <td style={{ padding: '8px', fontWeight: 600 }}>Temperatura</td>
-                    <td style={{ padding: '8px', textAlign: 'center', fontFamily: 'monospace' }}>
-                      {data.sourceDomTemp !== undefined ? `${data.sourceDomTemp.toFixed(1)} °C` : '—'}
-                    </td>
-                    <td style={{ padding: '8px', textAlign: 'center', fontFamily: 'monospace' }}>
-                      {data.targetDomTemp !== undefined ? `${data.targetDomTemp.toFixed(1)} °C` : '—'}
-                    </td>
-                  </tr>
-                  <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                    <td style={{ padding: '8px', fontWeight: 600 }}>Voltagem (Tensão)</td>
-                    <td style={{ padding: '8px', textAlign: 'center', fontFamily: 'monospace' }}>
-                      {data.sourceDomVolt !== undefined ? `${data.sourceDomVolt.toFixed(2)} V` : '—'}
-                    </td>
-                    <td style={{ padding: '8px', textAlign: 'center', fontFamily: 'monospace' }}>
-                      {data.targetDomVolt !== undefined ? `${data.targetDomVolt.toFixed(2)} V` : '—'}
-                    </td>
-                  </tr>
-                  <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                    <td style={{ padding: '8px', fontWeight: 600 }}>Corrente Bias (Laser)</td>
-                    <td style={{ padding: '8px', textAlign: 'center', fontFamily: 'monospace' }}>
-                      {data.sourceDomBias !== undefined ? `${data.sourceDomBias.toFixed(2)} mA` : '—'}
-                    </td>
-                    <td style={{ padding: '8px', textAlign: 'center', fontFamily: 'monospace' }}>
-                      {data.targetDomBias !== undefined ? `${data.targetDomBias.toFixed(2)} mA` : '—'}
-                    </td>
-                  </tr>
-                  <tr style={{ borderBottom: '1px solid #1e293b', background: 'rgba(34, 197, 94, 0.05)' }}>
-                    <td style={{ padding: '8px', fontWeight: 600, color: '#4ade80' }}>Potência de Transmissão (Tx)</td>
-                    <td style={{ padding: '8px', textAlign: 'center', fontFamily: 'monospace', color: '#4ade80' }}>
-                      {data.sourceDomTxPower !== undefined ? `${data.sourceDomTxPower.toFixed(2)} dBm` : '—'}
-                    </td>
-                    <td style={{ padding: '8px', textAlign: 'center', fontFamily: 'monospace', color: '#4ade80' }}>
-                      {data.targetDomTxPower !== undefined ? `${data.targetDomTxPower.toFixed(2)} dBm` : '—'}
-                    </td>
-                  </tr>
-                  <tr style={{ borderBottom: '1px solid #1e293b', background: 'rgba(59, 130, 246, 0.05)' }}>
-                    <td style={{ padding: '8px', fontWeight: 600, color: '#60a5fa' }}>Potência de Recepção (Rx)</td>
-                    <td style={{ padding: '8px', textAlign: 'center', fontFamily: 'monospace', color: '#60a5fa' }}>
-                      {data.sourceDomRxPower !== undefined ? `${data.sourceDomRxPower.toFixed(2)} dBm` : '—'}
-                    </td>
-                    <td style={{ padding: '8px', textAlign: 'center', fontFamily: 'monospace', color: '#60a5fa' }}>
-                      {data.targetDomRxPower !== undefined ? `${data.targetDomRxPower.toFixed(2)} dBm` : '—'}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <button
-                onClick={() => setShowDom(false)}
-                style={{
-                  marginTop: 10,
-                  background: 'transparent',
-                  color: '#94a3b8',
-                  border: '1px solid #334155',
-                  borderRadius: 4,
-                  padding: '6px',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  fontWeight: 600,
-                }}
-              >
-                ⬅️ Voltar para Informações Gerais do Link
-              </button>
             </div>
           )}
         </div>
@@ -287,12 +187,68 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
   );
 };
 
-/** Gráfico de área simples (SVG) com as duas direções do link. */
-const TrafficChart: React.FC<{ up?: BindingSeries; down?: BindingSeries }> = ({ up, down }) => {
-  const W = 540, H = 160, P = 8;
-  const all = [...(up?.values ?? []), ...(down?.values ?? [])];
+/** Visão focada numa única interface. */
+const FocusedView: React.FC<{ side: SideInfo }> = ({ side }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    {/* Tráfego (Inbound/Outbound) grandes */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <BigMetric label="Inbound" value={formatBitsPerSec(side.inbound)} color={IN_COLOR} />
+      <BigMetric label="Outbound" value={formatBitsPerSec(side.outbound)} color={OUT_COLOR} />
+    </div>
+
+    {/* Linha de infos */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, background: '#0b1220', border: '1px solid #1e293b', borderRadius: 8, padding: 12 }}>
+      {side.ip && <Field label="Endereço IP" value={side.ip} mono />}
+      <Field label="Erros / Drops" value={side.errors !== undefined ? String(side.errors) : '—'} color={side.errors && side.errors > 0 ? '#ef4444' : '#94a3b8'} />
+    </div>
+
+    {/* DOM Fibra (se houver) */}
+    {hasDom(side) && (
+      <div style={{ background: '#0b1220', border: '1px solid #1e293b', borderRadius: 8, padding: 12 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#a855f7', marginBottom: 10 }}>🧬 Diagnóstico Óptico (DOM)</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <Field label="Tx Power" value={side.domTx !== undefined ? `${side.domTx.toFixed(2)} dBm` : '—'} color="#4ade80" mono />
+          <Field label="Rx Power" value={side.domRx !== undefined ? `${side.domRx.toFixed(2)} dBm` : '—'} color="#60a5fa" mono />
+          <Field label="Temperatura" value={side.domTemp !== undefined ? `${side.domTemp.toFixed(1)} °C` : '—'} mono />
+          <Field label="Voltagem" value={side.domVolt !== undefined ? `${side.domVolt.toFixed(2)} V` : '—'} mono />
+          <Field label="Bias (laser)" value={side.domBias !== undefined ? `${side.domBias.toFixed(2)} mA` : '—'} mono />
+        </div>
+      </div>
+    )}
+  </div>
+);
+
+/** Cartão de um lado na visão geral (dois lados). */
+const SideCard: React.FC<{ side: SideInfo; accent: string }> = ({ side, accent }) => (
+  <div style={{ background: '#0b1220', border: '1px solid #1e293b', borderRadius: 8, padding: 12 }}>
+    <div style={{ fontSize: 12, fontWeight: 700, color: accent, marginBottom: 10, fontFamily: 'monospace' }}>
+      {side.label}{side.iface ? ` · ${side.iface}` : ''}
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      <Field label="Inbound" value={formatBitsPerSec(side.inbound)} color={IN_COLOR} />
+      <Field label="Outbound" value={formatBitsPerSec(side.outbound)} color={OUT_COLOR} />
+    </div>
+    {(side.errors !== undefined || side.ip) && (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+        {side.ip && <Field label="IP" value={side.ip} mono />}
+        {side.errors !== undefined && <Field label="Erros" value={String(side.errors)} color={side.errors > 0 ? '#ef4444' : '#94a3b8'} />}
+      </div>
+    )}
+    {hasDom(side) && (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, borderTop: '1px dashed #1e293b', paddingTop: 10 }}>
+        <Field label="Tx" value={side.domTx !== undefined ? `${side.domTx.toFixed(2)} dBm` : '—'} color="#4ade80" mono />
+        <Field label="Rx" value={side.domRx !== undefined ? `${side.domRx.toFixed(2)} dBm` : '—'} color="#60a5fa" mono />
+      </div>
+    )}
+  </div>
+);
+
+/** Gráfico de área (SVG) com Inbound (verde) e Outbound (azul). */
+const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries; title: string }> = ({ inbound, outbound, title }) => {
+  const W = 580, H = 170, P = 8;
+  const all = [...(inbound?.values ?? []), ...(outbound?.values ?? [])];
   if (all.length === 0) return null;
-  const tAll = [...(up?.times ?? []), ...(down?.times ?? [])];
+  const tAll = [...(inbound?.times ?? []), ...(outbound?.times ?? [])];
   const vMax = (Math.max(...all) || 1) * 1.08;
   const tMin = Math.min(...tAll);
   const tMax = Math.max(...tAll);
@@ -310,22 +266,22 @@ const TrafficChart: React.FC<{ up?: BindingSeries; down?: BindingSeries }> = ({ 
   const fmtT = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div style={{ border: '1px solid #1e293b', borderRadius: 6, background: 'rgba(30,41,59,0.4)', padding: '10px 12px' }}>
+    <div style={{ border: '1px solid #1e293b', borderRadius: 8, background: 'rgba(30,41,59,0.4)', padding: '10px 12px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>
-        <span style={{ fontWeight: 600 }}>📈 Tráfego no período do dashboard</span>
+        <span style={{ fontWeight: 600 }}>📈 {title}</span>
         <span>
-          <span style={{ color: '#22c55e' }}>● ↑ A→B</span>
-          <span style={{ color: '#22d3ee', marginLeft: 10 }}>● ↓ B→A</span>
+          <span style={{ color: IN_COLOR }}>● Inbound</span>
+          <span style={{ color: OUT_COLOR, marginLeft: 10 }}>● Outbound</span>
         </span>
       </div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
         {[0.25, 0.5, 0.75].map((f) => (
           <line key={f} x1={P} x2={W - P} y1={P + f * (H - 2 * P)} y2={P + f * (H - 2 * P)} stroke="rgba(255,255,255,0.05)" />
         ))}
-        {down && <path d={area(down)} fill="rgba(34,211,238,0.12)" />}
-        {up && <path d={area(up)} fill="rgba(34,197,94,0.12)" />}
-        {down && <path d={line(down)} fill="none" stroke="#22d3ee" strokeWidth={1.6} />}
-        {up && <path d={line(up)} fill="none" stroke="#22c55e" strokeWidth={1.6} />}
+        {outbound && <path d={area(outbound)} fill="rgba(59,130,246,0.12)" />}
+        {inbound && <path d={area(inbound)} fill="rgba(34,197,94,0.12)" />}
+        {outbound && <path d={line(outbound)} fill="none" stroke={OUT_COLOR} strokeWidth={1.6} />}
+        {inbound && <path d={line(inbound)} fill="none" stroke={IN_COLOR} strokeWidth={1.6} />}
       </svg>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginTop: 4 }}>
         <span>{fmtT(tMin)}</span>
@@ -336,25 +292,17 @@ const TrafficChart: React.FC<{ up?: BindingSeries; down?: BindingSeries }> = ({ 
   );
 };
 
-const sideBox: React.CSSProperties = {
-  background: '#0b1220',
-  border: '1px solid #1e293b',
-  borderRadius: 6,
-  padding: 10,
-};
+const BigMetric: React.FC<{ label: string; value: string; color: string }> = ({ label, value, color }) => (
+  <div style={{ background: '#0b1220', border: `1px solid ${color}40`, borderRadius: 8, padding: '12px 14px' }}>
+    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+    <div style={{ marginTop: 4, color, fontSize: 22, fontWeight: 700, fontFamily: 'monospace' }}>{value}</div>
+  </div>
+);
 
 const Field: React.FC<{ label: string; value: string; mono?: boolean; color?: string }> = ({ label, value, mono, color }) => (
   <div>
     <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
-    <div
-      style={{
-        marginTop: 2,
-        fontFamily: mono ? 'monospace' : 'inherit',
-        color: color ?? '#e2e8f0',
-        fontSize: mono ? 13 : 14,
-        fontWeight: 600,
-      }}
-    >
+    <div style={{ marginTop: 2, fontFamily: mono ? 'monospace' : 'inherit', color: color ?? '#e2e8f0', fontSize: mono ? 13 : 14, fontWeight: 600 }}>
       {value}
     </div>
   </div>
@@ -369,7 +317,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   };
   const s = map[status] ?? map.unknown;
   return (
-    <span style={{ background: s.bg, color: s.fg, padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>
+    <span style={{ background: s.bg, color: s.fg, padding: '4px 12px', borderRadius: 5, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>
       {s.label}
     </span>
   );
@@ -378,8 +326,21 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 const UtilBadge: React.FC<{ pct: string; util: number }> = ({ pct, util }) => {
   const color = util > 0.8 ? '#f59e0b' : util > 0.5 ? '#facc15' : '#22d3ee';
   return (
-    <span style={{ background: '#1e293b', color, padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700, border: `1px solid ${color}50` }}>
+    <span style={{ background: '#1e293b', color, padding: '4px 12px', borderRadius: 5, fontSize: 11, fontWeight: 700, border: `1px solid ${color}50` }}>
       {pct}% utilizado
     </span>
   );
+};
+
+const badgeNeutral: React.CSSProperties = {
+  background: '#1e293b', color: '#94a3b8', padding: '4px 12px', borderRadius: 5,
+  fontSize: 11, fontWeight: 600, border: '1px solid #334155',
+};
+const btnX: React.CSSProperties = {
+  background: 'transparent', color: '#94a3b8', border: '1px solid #334155',
+  borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontSize: 14,
+};
+const emptyChart: React.CSSProperties = {
+  marginTop: 16, padding: 14, border: '1px dashed #334155', borderRadius: 6,
+  background: 'rgba(30, 41, 59, 0.4)', textAlign: 'center', color: '#64748b', fontSize: 12,
 };

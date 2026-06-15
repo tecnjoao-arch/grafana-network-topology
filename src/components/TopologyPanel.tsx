@@ -166,6 +166,8 @@ interface HoverState {
 
 interface ClickState {
   edgeId: string;
+  /** Lado/interface em foco no modal (clique num card específico) */
+  side?: 'source' | 'target';
 }
 
 export const TopologyPanel: React.FC<Props> = (props) => {
@@ -240,7 +242,9 @@ export const TopologyPanel: React.FC<Props> = (props) => {
     () => topology.edges.map((e) => {
       const up = resolveBinding(series, e.data.trafficUpBinding);
       const down = resolveBinding(series, e.data.trafficDownBinding);
-      const speed = resolveBinding(series, e.data.speedBinding);
+      // Capacidade é quase-estática e no Zabbix costuma ser coletada de hora em
+      // hora — não pode ser descartada pela checagem de obsolescência (stale).
+      const speed = resolveBinding(series, e.data.speedBinding, { ignoreStale: true });
       const srcIp = resolveTextBinding(series, e.data.sourceIpBinding);
       const tgtIp = resolveTextBinding(series, e.data.targetIpBinding);
       
@@ -716,6 +720,12 @@ const TopologyInner: React.FC<InnerProps> = ({
     }
   }, [options.editMode]);
 
+  // Abre o modal de detalhes focado num lado (clique num card de interface)
+  const openLinkDetails = useCallback((edgeId: string, side?: 'source' | 'target') => {
+    setHover(null);
+    setClicked({ edgeId, side });
+  }, []);
+
   // Resolve labels da source/target a partir do edge
   const findEdge = (id: string) => edges.find((e) => e.id === id);
   const findNodeLabel = (id: string) => (nodes.find((n) => n.id === id)?.data as any)?.label ?? id;
@@ -725,7 +735,7 @@ const TopologyInner: React.FC<InnerProps> = ({
   const editingEdge = editingEdgeId ? findEdge(editingEdgeId) : null;
 
   return (
-    <EditorProvider value={{ editMode: !!options.editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, deleteEdge, setNodeData: setNodeDataPatch, deleteNode, duplicateNode }}>
+    <EditorProvider value={{ editMode: !!options.editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, deleteEdge, setNodeData: setNodeDataPatch, deleteNode, duplicateNode, openLinkDetails }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -803,6 +813,7 @@ const TopologyInner: React.FC<InnerProps> = ({
           sourceLabel={findNodeLabel(clickedEdge.source)}
           targetLabel={findNodeLabel(clickedEdge.target)}
           series={data?.series ?? []}
+          focusSide={clicked.side}
           onClose={() => setClicked(null)}
         />
       )}

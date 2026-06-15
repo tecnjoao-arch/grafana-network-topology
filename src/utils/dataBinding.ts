@@ -136,13 +136,20 @@ export function listSeriesKeys(series: DataFrame[]): string[] {
   return Array.from(keys);
 }
 
+/** Opções de resolução. ignoreStale: não descarta valor antigo (capacidade,
+ *  diagnóstico etc — métricas quase-estáticas, de coleta lenta no Zabbix). */
+export interface ResolveOpts {
+  ignoreStale?: boolean;
+}
+
 /** Resolve o valor numérico de um binding. undefined se nada casar. */
-export function resolveBinding(series: DataFrame[], binding?: MetricBinding): number | undefined {
+export function resolveBinding(series: DataFrame[], binding?: MetricBinding, opts?: ResolveOpts): number | undefined {
   if (!binding || !binding.match || series.length === 0) return undefined;
 
   const idx = getIndex(series);
   const agg = binding.aggregation ?? 'last';
-  const cacheKey = `n|${binding.query ?? ''}|${agg}|${defaultStaleMs}|${binding.match}`;
+  const ignoreStale = !!opts?.ignoreStale;
+  const cacheKey = `n|${binding.query ?? ''}|${agg}|${defaultStaleMs}|${ignoreStale ? 'S0' : 'S1'}|${binding.match}`;
   if (idx.results.has(cacheKey)) return idx.results.get(cacheKey) as number | undefined;
 
   const matches = makeMatcher(binding.match);
@@ -157,8 +164,8 @@ export function resolveBinding(series: DataFrame[], binding?: MetricBinding): nu
 
     // Checar se o dado está obsoleto (stale) comparando com o timestamp máximo global.
     // Só se aplica a 'last' (valor "agora"); agregações de janela (avg/max/min/first)
-    // continuam válidas mesmo que o último ponto seja antigo.
-    if (agg === 'last' && defaultStaleMs > 0 && f.timeField && idx.maxTime > 0) {
+    // continuam válidas mesmo que o último ponto seja antigo. ignoreStale pula tudo.
+    if (!ignoreStale && agg === 'last' && defaultStaleMs > 0 && f.timeField && idx.maxTime > 0) {
       const timeVals = f.timeField.values as unknown as any[];
       let lastIdx = -1;
       for (let i = vals.length - 1; i >= 0; i--) {

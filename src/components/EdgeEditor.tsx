@@ -484,14 +484,14 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
               Lado A (Origem - {sourceLabel})
             </div>
             <BindRow
-              label="Upload (bps) [A → B]"
+              label="🟢 Inbound (bps) — bits received"
               binding={data.sourceTrafficUpBinding}
               seriesKeys={seriesKeys}
               onMatch={(m) => patchBinding('sourceTrafficUpBinding', { match: m })}
               onAgg={(a) => patchBinding('sourceTrafficUpBinding', { aggregation: a })}
             />
             <BindRow
-              label="Download (bps) [B → A]"
+              label="🔵 Outbound (bps) — bits sent"
               binding={data.sourceTrafficDownBinding}
               seriesKeys={seriesKeys}
               onMatch={(m) => patchBinding('sourceTrafficDownBinding', { match: m })}
@@ -502,14 +502,14 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
               Lado B (Destino - {targetLabel})
             </div>
             <BindRow
-              label="Upload (bps) [B → A]"
+              label="🟢 Inbound (bps) — bits received"
               binding={data.targetTrafficUpBinding}
               seriesKeys={seriesKeys}
               onMatch={(m) => patchBinding('targetTrafficUpBinding', { match: m })}
               onAgg={(a) => patchBinding('targetTrafficUpBinding', { aggregation: a })}
             />
             <BindRow
-              label="Download (bps) [A → B]"
+              label="🔵 Outbound (bps) — bits sent"
               binding={data.targetTrafficDownBinding}
               seriesKeys={seriesKeys}
               onMatch={(m) => patchBinding('targetTrafficDownBinding', { match: m })}

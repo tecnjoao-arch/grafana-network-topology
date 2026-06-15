@@ -18,7 +18,8 @@
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: '\\\\''Escala da fonte'\\\\'' agora escala os cards de interface e os icones dos nos *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: modal com trafego por lado + grafico historico real + capacidade fixa *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: cards arrastaveis, snap magnetico em waypoints, editor mais largo e ciente dos thresholds *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'perf: indexa series uma vez por refresh + cache de resultado por binding *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'perf: indexa series uma vez por refresh + cache de resultado por binding *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: modal por interface, orto sem deformacao, fix speed stale, inbound/outbound *)"
     ]
   }
 }

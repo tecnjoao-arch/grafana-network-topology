@@ -40,6 +40,17 @@ function pointToAnchor(node: any, p: Pt): Pt {
   return { x: Math.min(1, Math.max(0, fx)), y: Math.min(1, Math.max(0, fy)) };
 }
 
+/** Lado do nó mais próximo de uma âncora fracionária (0..1) — define a direção
+ *  perpendicular de saída da linha no roteamento ortogonal/curvo. */
+function anchorSide(a: Pt): Position {
+  const dl = a.x, dr = 1 - a.x, dt = a.y, db = 1 - a.y;
+  const m = Math.min(dl, dr, dt, db);
+  if (m === dt) return Position.Top;
+  if (m === db) return Position.Bottom;
+  if (m === dl) return Position.Left;
+  return Position.Right;
+}
+
 function distToSegment(p: Pt, a: Pt, b: Pt): number {
   const dx = b.x - a.x, dy = b.y - a.y;
   const l2 = dx * dx + dy * dy;
@@ -69,7 +80,7 @@ function offsetPath(pts: Pt[], d: number): string {
 export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }) => {
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
-  const { editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData } = useEditor();
+  const { editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, openLinkDetails } = useEditor();
   const { screenToFlowPosition } = useReactFlow();
 
   const [localWp, setLocalWp] = useState<Pt[]>(data?.waypoints ?? []);
@@ -104,24 +115,23 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
   const sp: Pt = localSrcA ? anchorToPoint(sourceNode, localSrcA) : { x: fp.sx, y: fp.sy };
   const tp: Pt = localTgtA ? anchorToPoint(targetNode, localTgtA) : { x: fp.tx, y: fp.ty };
 
+  // Lado real em que cada ponta toca o nó. Para roteamento ortogonal/curvo a
+  // linha PRECISA sair perpendicular a esse lado, senão o getSmoothStepPath
+  // recebe uma direção que não bate com o ponto e deforma as pontas.
+  // Âncora manual → lado derivado da fração; automático → lado do floatingEdge.
+  const sourcePos = localSrcA ? anchorSide(localSrcA) : fp.sourcePos;
+  const targetPos = localTgtA ? anchorSide(localTgtA) : fp.targetPos;
+
   const points: Pt[] = [sp, ...localWp, tp];
   const pathType = data?.pathType ?? 'straight';
-  
+
   let edgePath = '';
   if (pathType === 'curved' && localWp.length === 0) {
-    const dx = tp.x - sp.x;
-    const dy = tp.y - sp.y;
-    const sourcePos = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? Position.Right : Position.Left) : (dy > 0 ? Position.Bottom : Position.Top);
-    const targetPos = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? Position.Left : Position.Right) : (dy > 0 ? Position.Top : Position.Bottom);
     [edgePath] = getBezierPath({
       sourceX: sp.x, sourceY: sp.y, sourcePosition: sourcePos,
       targetX: tp.x, targetY: tp.y, targetPosition: targetPos,
     });
   } else if (pathType === 'step' && localWp.length === 0) {
-    const dx = tp.x - sp.x;
-    const dy = tp.y - sp.y;
-    const sourcePos = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? Position.Right : Position.Left) : (dy > 0 ? Position.Bottom : Position.Top);
-    const targetPos = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? Position.Left : Position.Right) : (dy > 0 ? Position.Top : Position.Bottom);
     [edgePath] = getSmoothStepPath({
       sourceX: sp.x, sourceY: sp.y, sourcePosition: sourcePos,
       targetX: tp.x, targetY: tp.y, targetPosition: targetPos,
@@ -462,6 +472,7 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             onDragDown={onLabelDown('source')}
             onDragMove={onLabelMove}
             onDragUp={onLabelUp}
+            onOpenDetails={!editMode && openLinkDetails ? () => openLinkDetails(id, 'source') : undefined}
           />
         )}
         {data?.targetInterface && (
@@ -483,6 +494,7 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             onDragDown={onLabelDown('target')}
             onDragMove={onLabelMove}
             onDragUp={onLabelUp}
+            onOpenDetails={!editMode && openLinkDetails ? () => openLinkDetails(id, 'target') : undefined}
           />
         )}
       </EdgeLabelRenderer>
@@ -533,9 +545,12 @@ const IfLabel: React.FC<{
   onDragDown?: (e: React.PointerEvent) => void;
   onDragMove?: (e: React.PointerEvent) => void;
   onDragUp?: (e: React.PointerEvent) => void;
-}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, draggable, onDragDown, onDragMove, onDragUp }) => {
+  /** Fora do modo edição: clique abre o modal com os detalhes desta interface */
+  onOpenDetails?: () => void;
+}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, draggable, onDragDown, onDragMove, onDragUp, onOpenDetails }) => {
   const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation(); // não abrir o modal ao copiar IP
     if (!ip) return;
     navigator.clipboard.writeText(ip);
     setCopied(true);
@@ -548,11 +563,12 @@ const IfLabel: React.FC<{
       onPointerDown={draggable ? onDragDown : undefined}
       onPointerMove={draggable ? onDragMove : undefined}
       onPointerUp={draggable ? onDragUp : undefined}
-      title={draggable ? 'Arraste para reposicionar o card' : undefined}
+      onClick={!draggable && onOpenDetails ? onOpenDetails : undefined}
+      title={draggable ? 'Arraste para reposicionar o card' : (onOpenDetails ? 'Clique para ver os detalhes desta interface' : undefined)}
       style={{
         position: 'absolute',
         transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`,
-        cursor: draggable ? 'grab' : undefined,
+        cursor: draggable ? 'grab' : (onOpenDetails ? 'pointer' : undefined),
         // em (não px): acompanha a opção "Escala da fonte" do painel (TV de NOC)
         fontSize: '0.65em',
         color,
@@ -598,11 +614,11 @@ const IfLabel: React.FC<{
       )}
       {showTraffic && (tx !== undefined || rx !== undefined) && (
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 3, paddingTop: 3, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.95em', width: '100%' }}>
-          <div style={{ color: '#22c55e', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
-            <span>↑</span> <span>{formatBitsPerSec(tx)}</span>
+          <div style={{ color: '#22c55e', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+            <span>In</span> <span>{formatBitsPerSec(tx)}</span>
           </div>
-          <div style={{ color: '#3b82f6', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
-            <span>↓</span> <span>{formatBitsPerSec(rx)}</span>
+          <div style={{ color: '#3b82f6', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+            <span>Out</span> <span>{formatBitsPerSec(rx)}</span>
           </div>
           {(footer === 'speed' || footer === 'both') && speed !== undefined && (
             <div style={{ color: '#94a3b8', fontSize: '0.88em', borderTop: '1px dashed rgba(255,255,255,0.05)', marginTop: 2, paddingTop: 2, textAlign: 'center' }}>
