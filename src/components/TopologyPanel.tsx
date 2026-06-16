@@ -408,20 +408,28 @@ const TopologyInner: React.FC<InnerProps> = ({
   // Painel travado: bloqueia zoom/pan (útil em TV de NOC, evita zoom acidental)
   const [locked, setLocked] = useState(false);
 
+  // Espelho dos nós em ref: o fitToContent lê daqui pra NÃO depender de `nodes`.
+  // Sem isso, o array de nós muda a cada refresh de dados (10s) → o callback
+  // mudava → o efeito de auto-fit re-disparava → o mapa "ampliava e voltava".
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+
   // Fit-view que PREENCHE a tela: o fitView padrão mede só os nós e deixa muita
   // margem. Aqui medimos o bounding box dos nós, reservamos uma margem (em
   // unidades de flow) proporcional à escala da fonte pros cards das interfaces
   // que estendem além dos nós, e damos zoom bem justo (padding 0.02).
+  // Estável (só refaz se a escala mudar) → só roda no resize/fit manual, não a cada refresh.
   const fitToContent = useCallback((duration = 300) => {
-    if (!nodes.length) return;
-    const b = getNodesBounds(nodes);
+    const ns = nodesRef.current;
+    if (!ns.length) return;
+    const b = getNodesBounds(ns);
     if (!b.width || !b.height) return;
     const m = 45 * (options.fontScale ?? 1) + 25; // reserva pros labels
     fitBounds(
       { x: b.x - m, y: b.y - m, width: b.width + m * 2, height: b.height + m * 2 },
       { padding: 0.02, duration }
     );
-  }, [nodes, options.fontScale, fitBounds]);
+  }, [options.fontScale, fitBounds]);
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
 
