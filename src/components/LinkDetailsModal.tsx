@@ -158,7 +158,7 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
           </div>
 
           {focus ? (
-            <FocusedView side={focus} />
+            <FocusedView side={focus} speed={data.linkSpeed} />
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <SideCard side={src} accent="#3b82f6" />
@@ -169,7 +169,7 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
           {/* Gráfico histórico */}
           {(inHist || outHist) ? (
             <div style={{ marginTop: 16 }}>
-              <TrafficChart inbound={inHist} outbound={outHist} title={focus ? `Histórico · ${focus.iface ?? focus.label}` : 'Histórico no período do dashboard'} />
+              <TrafficChart inbound={inHist} outbound={outHist} speed={data.linkSpeed} title={focus ? `Histórico · ${focus.iface ?? focus.label}` : 'Histórico no período do dashboard'} />
             </div>
           ) : (
             <div style={emptyChart}>
@@ -187,34 +187,57 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
   );
 };
 
-/** Visão focada numa única interface. */
-const FocusedView: React.FC<{ side: SideInfo }> = ({ side }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-    {/* Tráfego (Inbound/Outbound) grandes */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-      <BigMetric label="Inbound" value={formatBitsPerSec(side.inbound)} color={IN_COLOR} />
-      <BigMetric label="Outbound" value={formatBitsPerSec(side.outbound)} color={OUT_COLOR} />
-    </div>
+/** % de utilização → cor (verde < 50, amarelo < 80, laranja >= 90). */
+function utilColor(pct?: number): string {
+  if (pct === undefined) return '#94a3b8';
+  if (pct >= 90) return '#f59e0b';
+  if (pct >= 50) return '#facc15';
+  return '#22c55e';
+}
 
-    {/* Linha de infos */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, background: '#0b1220', border: '1px solid #1e293b', borderRadius: 8, padding: 12 }}>
-      {side.ip && <Field label="Endereço IP" value={side.ip} mono />}
-      <Field label="Erros / Drops" value={side.errors !== undefined ? String(side.errors) : '—'} color={side.errors && side.errors > 0 ? '#ef4444' : '#94a3b8'} />
-    </div>
-
-    {/* DOM Fibra (se houver) */}
-    {hasDom(side) && (
-      <div style={{ background: '#0b1220', border: '1px solid #1e293b', borderRadius: 8, padding: 12 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#a855f7', marginBottom: 10 }}>🧬 Diagnóstico Óptico (DOM)</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-          <Field label="Tx Power" value={side.domTx !== undefined ? `${side.domTx.toFixed(2)} dBm` : '—'} color="#4ade80" mono />
-          <Field label="Rx Power" value={side.domRx !== undefined ? `${side.domRx.toFixed(2)} dBm` : '—'} color="#60a5fa" mono />
-          <Field label="Temperatura" value={side.domTemp !== undefined ? `${side.domTemp.toFixed(1)} °C` : '—'} mono />
-          <Field label="Voltagem" value={side.domVolt !== undefined ? `${side.domVolt.toFixed(2)} V` : '—'} mono />
-          <Field label="Bias (laser)" value={side.domBias !== undefined ? `${side.domBias.toFixed(2)} mA` : '—'} mono />
-        </div>
+/** Visão focada numa única interface (estilo "detalhamento da interface"). */
+const FocusedView: React.FC<{ side: SideInfo; speed?: number }> = ({ side, speed }) => {
+  const utilRx = speed && speed > 0 && side.inbound !== undefined ? (side.inbound / speed) * 100 : undefined;
+  const utilTx = speed && speed > 0 && side.outbound !== undefined ? (side.outbound / speed) * 100 : undefined;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Linha 1: RX / TX / Speed / Erros */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        <Metric label="RX atual" value={formatBitsPerSec(side.inbound)} color={IN_COLOR} big />
+        <Metric label="TX atual" value={formatBitsPerSec(side.outbound)} color={OUT_COLOR} big />
+        <Metric label="Speed" value={speed !== undefined ? formatBitsPerSec(speed) : '—'} color="#cbd5e1" big />
+        <Metric label="Erros / Descartes" value={side.errors !== undefined ? String(side.errors) : '0'} color={side.errors && side.errors > 0 ? '#ef4444' : '#22c55e'} big />
       </div>
-    )}
+
+      {/* Linha 2: Utilização por direção */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        <Metric label="Util RX" value={utilRx !== undefined ? `${utilRx.toFixed(1)}%` : '—'} color={utilColor(utilRx)} />
+        <Metric label="Util TX" value={utilTx !== undefined ? `${utilTx.toFixed(1)}%` : '—'} color={utilColor(utilTx)} />
+        {side.ip && <Metric label="Endereço IP" value={side.ip} color="#cbd5e1" mono />}
+      </div>
+
+      {/* DOM Fibra (se houver) */}
+      {hasDom(side) && (
+        <div style={{ background: '#0b1220', border: '1px solid #1e293b', borderRadius: 8, padding: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#a855f7', marginBottom: 10 }}>🧬 Diagnóstico Óptico (DOM)</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            <Field label="Tx Power" value={side.domTx !== undefined ? `${side.domTx.toFixed(2)} dBm` : '—'} color="#4ade80" mono />
+            <Field label="Rx Power" value={side.domRx !== undefined ? `${side.domRx.toFixed(2)} dBm` : '—'} color="#60a5fa" mono />
+            <Field label="Temperatura" value={side.domTemp !== undefined ? `${side.domTemp.toFixed(1)} °C` : '—'} mono />
+            <Field label="Voltagem" value={side.domVolt !== undefined ? `${side.domVolt.toFixed(2)} V` : '—'} mono />
+            <Field label="Bias (laser)" value={side.domBias !== undefined ? `${side.domBias.toFixed(2)} mA` : '—'} mono />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/** Cartão de métrica reutilizável (estilo do print de referência). */
+const Metric: React.FC<{ label: string; value: string; color: string; big?: boolean; mono?: boolean }> = ({ label, value, color, big, mono }) => (
+  <div style={{ background: '#0b1220', border: `1px solid ${color}33`, borderRadius: 8, padding: big ? '12px 14px' : '10px 12px' }}>
+    <div style={{ fontSize: 10.5, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+    <div style={{ marginTop: 4, color, fontSize: big ? 19 : 15, fontWeight: 700, fontFamily: mono ? 'monospace' : 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
   </div>
 );
 
@@ -243,13 +266,16 @@ const SideCard: React.FC<{ side: SideInfo; accent: string }> = ({ side, accent }
   </div>
 );
 
-/** Gráfico de área (SVG) com Inbound (verde) e Outbound (azul). */
-const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries; title: string }> = ({ inbound, outbound, title }) => {
+/** Gráfico de área (SVG) com Inbound (verde), Outbound (azul) e linha de Speed. */
+const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries; speed?: number; title: string }> = ({ inbound, outbound, speed, title }) => {
   const W = 580, H = 170, P = 8;
   const all = [...(inbound?.values ?? []), ...(outbound?.values ?? [])];
   if (all.length === 0) return null;
   const tAll = [...(inbound?.times ?? []), ...(outbound?.times ?? [])];
-  const vMax = (Math.max(...all) || 1) * 1.08;
+  const peak = Math.max(...all) || 1;
+  // Se a capacidade está definida e é maior que o pico, o teto do gráfico vai até
+  // a capacidade — assim a linha de Speed aparece no topo e dá pra ver a folga.
+  const vMax = (speed && speed > peak ? speed : peak) * 1.06;
   const tMin = Math.min(...tAll);
   const tMax = Math.max(...tAll);
   const span = Math.max(1, tMax - tMin);
@@ -272,6 +298,7 @@ const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries
         <span>
           <span style={{ color: IN_COLOR }}>● Inbound</span>
           <span style={{ color: OUT_COLOR, marginLeft: 10 }}>● Outbound</span>
+          {speed !== undefined && <span style={{ color: '#94a3b8', marginLeft: 10 }}>– – Speed</span>}
         </span>
       </div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
@@ -282,6 +309,12 @@ const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries
         {inbound && <path d={area(inbound)} fill="rgba(34,197,94,0.12)" />}
         {outbound && <path d={line(outbound)} fill="none" stroke={OUT_COLOR} strokeWidth={1.6} />}
         {inbound && <path d={line(inbound)} fill="none" stroke={IN_COLOR} strokeWidth={1.6} />}
+        {speed !== undefined && speed <= vMax && (
+          <>
+            <line x1={P} x2={W - P} y1={py(speed)} y2={py(speed)} stroke="#94a3b8" strokeWidth={1} strokeDasharray="6 5" />
+            <text x={W - P} y={py(speed) - 4} textAnchor="end" fontSize={10} fill="#94a3b8">Speed {formatBitsPerSec(speed)}</text>
+          </>
+        )}
       </svg>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginTop: 4 }}>
         <span>{fmtT(tMin)}</span>
@@ -291,13 +324,6 @@ const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries
     </div>
   );
 };
-
-const BigMetric: React.FC<{ label: string; value: string; color: string }> = ({ label, value, color }) => (
-  <div style={{ background: '#0b1220', border: `1px solid ${color}40`, borderRadius: 8, padding: '12px 14px' }}>
-    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
-    <div style={{ marginTop: 4, color, fontSize: 22, fontWeight: 700, fontFamily: 'monospace' }}>{value}</div>
-  </div>
-);
 
 const Field: React.FC<{ label: string; value: string; mono?: boolean; color?: string }> = ({ label, value, mono, color }) => (
   <div>

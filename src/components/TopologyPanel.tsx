@@ -304,6 +304,17 @@ export const TopologyPanel: React.FC<Props> = (props) => {
       const targetUp   = tgtUp   ?? down ?? e.data.targetTrafficUp   ?? e.data.trafficDown ?? e.data.trafficUp;
       const targetDown = tgtDown ?? up   ?? e.data.targetTrafficDown ?? e.data.trafficUp   ?? e.data.trafficDown;
 
+      // Congestionamento: link "up" passando de 90% de utilização vira laranja,
+      // mesmo com threshold verde (saturação é mais crítica que o status up).
+      // Respeita cor manual: se o usuário fixou e.data.color, mantém.
+      const effSpeed = speed ?? e.data.linkSpeed;
+      const effTraffic = Math.max(sourceUp ?? 0, sourceDown ?? 0, targetUp ?? 0, targetDown ?? 0, up ?? 0, down ?? 0);
+      const util = effSpeed && effSpeed > 0 ? Math.min(1, effTraffic / effSpeed) : 0;
+      if (edgeStatus === 'up' && util >= 0.9 && e.data.color === undefined) {
+        edgeColor = '#f59e0b';
+        edgeStatus = 'warning';
+      }
+
       const liveData: LinkEdgeData = {
         ...e.data,
         // Tráfego "global" do link (tooltip, modal, utilização→cor/espessura):
@@ -345,6 +356,8 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         // Escala da fonte injetada: o card (LinkEdge) usa pra afastar os labels
         // proporcionalmente, senão eles colidem ao aumentar a escala.
         fontScale: options.fontScale ?? 1,
+        // Cor de fundo do painel: o traçado duplo usa pra desenhar o "vão" central.
+        panelBg: options.theme === 'light' ? '#f8fafc' : '#020617',
       } as LinkEdgeData;
       return {
         id: e.id,

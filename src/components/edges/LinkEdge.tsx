@@ -60,22 +60,6 @@ function distToSegment(p: Pt, a: Pt, b: Pt): number {
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
-/** Gera o path de uma polilinha deslocada perpendicularmente por `d`
- *  (positivo = um lado, negativo = o outro). Usado p/ traçado duplo. */
-function offsetPath(pts: Pt[], d: number): string {
-  if (pts.length < 2) return '';
-  const out: Pt[] = pts.map((p, i) => {
-    let dx: number, dy: number;
-    if (i === 0) { dx = pts[1].x - p.x; dy = pts[1].y - p.y; }
-    else if (i === pts.length - 1) { dx = p.x - pts[i - 1].x; dy = p.y - pts[i - 1].y; }
-    else { dx = pts[i + 1].x - pts[i - 1].x; dy = pts[i + 1].y - pts[i - 1].y; }
-    const len = Math.hypot(dx, dy) || 1;
-    // perpendicular unitária
-    const px = -dy / len, py = dx / len;
-    return { x: p.x + px * d, y: p.y + py * d };
-  });
-  return out.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-}
 
 export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }) => {
   const sourceNode = useInternalNode(source);
@@ -182,7 +166,7 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
   const autoColor =
     status === 'down' ? '#ef4444' :
     status === 'warning' ? '#f59e0b' :
-    status === 'up' && util > 0.8 ? '#f59e0b' :
+    status === 'up' && util >= 0.9 ? '#f59e0b' :
     status === 'up' ? '#22c55e' :
     '#64748b';
   const color = data?.color ?? autoColor;
@@ -386,32 +370,35 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
       <path id={id} d={edgePath} fill="none" stroke="none" style={{ pointerEvents: 'none' }} />
 
       {isDouble ? (
-        // Traçado duplo: 2 fios paralelos. Quando animado, cada um vai
-        // num sentido (↑ upload e ↓ download = tráfego bidirecional).
+        // Traçado duplo: faixa na cor + núcleo na cor de fundo, ambos sobre o
+        // MESMO edgePath. Assim acompanha qualquer formato (reto/orto/curvo) sem
+        // deformar nas pontas (o método antigo, deslocando perpendicular ponto a
+        // ponto, distorcia nos cantos). Animação opcional flui na faixa externa.
         (() => {
           const active = animation !== 'none';
-          const sep = Math.max(3, strokeWidth * 0.85);
-          const strandW = Math.max(2, strokeWidth * 0.7);
-          const strandDash = active ? '12 9' : '0';
+          const bandW = Math.max(5, strokeWidth * 1.6);   // largura total da faixa
+          const coreW = Math.max(2, bandW * 0.42);          // vão central (cor de fundo)
+          const bg = ((data as any)?.panelBg as string) ?? '#020617';
           return (
             <>
               <path
-                d={offsetPath(points, sep)}
+                d={edgePath}
                 fill="none"
                 stroke={color}
-                strokeWidth={strandW}
-                strokeDasharray={strandDash}
-                strokeLinecap={round ? 'round' : 'butt'}
+                strokeWidth={bandW}
+                strokeDasharray={active ? '14 10' : '0'}
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 style={{ animation: active ? 'fc-flow 1s linear infinite' : undefined, pointerEvents: 'none' }}
               />
               <path
-                d={offsetPath(points, -sep)}
+                d={edgePath}
                 fill="none"
-                stroke={color}
-                strokeWidth={strandW}
-                strokeDasharray={strandDash}
-                strokeLinecap={round ? 'round' : 'butt'}
-                style={{ animation: active ? 'fc-flow-rev 1s linear infinite' : undefined, pointerEvents: 'none' }}
+                stroke={bg}
+                strokeWidth={coreW}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ pointerEvents: 'none' }}
               />
             </>
           );
@@ -573,8 +560,9 @@ const IfLabel: React.FC<{
         position: 'absolute',
         transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`,
         cursor: draggable ? 'grab' : (onOpenDetails ? 'pointer' : undefined),
-        // em (não px): acompanha a opção "Escala da fonte" do painel (TV de NOC)
-        fontSize: '0.65em',
+        // em (não px): acompanha a opção "Escala da fonte" do painel (TV de NOC).
+        // Setas (↓/↑) no lugar de "In/Out" liberam espaço → fonte um pouco maior.
+        fontSize: '0.74em',
         color,
         fontFamily: 'monospace',
         background: 'rgba(15, 23, 42, 0.95)',
@@ -619,10 +607,10 @@ const IfLabel: React.FC<{
       {showTraffic && (tx !== undefined || rx !== undefined) && (
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 3, paddingTop: 3, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.95em', width: '100%' }}>
           <div style={{ color: '#22c55e', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-            <span>In</span> <span>{formatBitsPerSec(tx)}</span>
+            <span style={{ fontWeight: 700 }}>↓</span> <span>{formatBitsPerSec(tx)}</span>
           </div>
           <div style={{ color: '#3b82f6', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-            <span>Out</span> <span>{formatBitsPerSec(rx)}</span>
+            <span style={{ fontWeight: 700 }}>↑</span> <span>{formatBitsPerSec(rx)}</span>
           </div>
           {(footer === 'speed' || footer === 'both') && speed !== undefined && (
             <div style={{ color: '#94a3b8', fontSize: '0.88em', borderTop: '1px dashed rgba(255,255,255,0.05)', marginTop: 2, paddingTop: 2, textAlign: 'center' }}>
