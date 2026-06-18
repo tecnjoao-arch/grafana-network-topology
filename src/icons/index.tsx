@@ -147,6 +147,90 @@ const PATHS: Record<string, string> = {
     <circle cx="32" cy="32" r="6" fill="currentColor"/>`,
 };
 
+// ── Ícones 3D isométricos (tingidos pela cor do status) ──────────────────────
+// Derivam 3 tons da cor base (status): topo claro, lateral médio, base escura.
+// Mantém o sinal de NOC: down = vermelho, alerta = laranja, up = verde.
+
+function parseHex(hex: string): [number, number, number] | null {
+  if (!/^#?[0-9a-fA-F]{3}$|^#?[0-9a-fA-F]{6}$/.test(hex)) return null;
+  const h = hex.replace('#', '');
+  const n = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  return [parseInt(n.slice(0, 2), 16), parseInt(n.slice(2, 4), 16), parseInt(n.slice(4, 6), 16)];
+}
+function mix(hex: string, target: [number, number, number], amt: number): string {
+  const rgb = parseHex(hex);
+  if (!rgb) return hex;
+  const c = (a: number, t: number) => Math.max(0, Math.min(255, Math.round(a + (t - a) * amt)));
+  const h2 = (v: number) => v.toString(16).padStart(2, '0');
+  return '#' + h2(c(rgb[0], target[0])) + h2(c(rgb[1], target[1])) + h2(c(rgb[2], target[2]));
+}
+interface Shades { light: string; mid: string; dark: string; edge: string; }
+function shades(base: string): Shades {
+  return {
+    light: mix(base, [255, 255, 255], 0.16),
+    mid: mix(base, [0, 0, 0], 0.06),
+    dark: mix(base, [0, 0, 0], 0.5),
+    edge: mix(base, [255, 255, 255], 0.45),
+  };
+}
+
+const ARROW_MARKER =
+  '<defs><marker id="ndarw" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">' +
+  '<path d="M2 1 L8 5 L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>';
+
+/** 4 setas brancas saindo do centro (símbolo de roteamento). */
+const arrows4 = (cx: number, cy: number, rx: number, ry: number, w = 2.4): string =>
+  `<g stroke="#fff" stroke-width="${w}" stroke-linecap="round" marker-end="url(#ndarw)">
+    <line x1="${cx}" y1="${cy}" x2="${cx + rx}" y2="${cy - ry}"/>
+    <line x1="${cx}" y1="${cy}" x2="${cx - rx}" y2="${cy - ry}"/>
+    <line x1="${cx}" y1="${cy}" x2="${cx + rx}" y2="${cy + ry}"/>
+    <line x1="${cx}" y1="${cy}" x2="${cx - rx}" y2="${cy + ry}"/>
+  </g>`;
+
+const puck3D = (s: Shades): string => ARROW_MARKER +
+  `<ellipse cx="32" cy="43" rx="27" ry="8.5" fill="${s.dark}"/>
+   <path d="M5 32 L5 43 A27 8.5 0 0 0 59 43 L59 32 Z" fill="${s.mid}"/>
+   <ellipse cx="32" cy="32" rx="27" ry="8.5" fill="${s.light}" stroke="${s.edge}" stroke-width="1.2"/>
+   ${arrows4(32, 32, 15, 6.5)}`;
+
+const box3D = (s: Shades, extra = ''): string => ARROW_MARKER +
+  `<path d="M10 24 L32 15 L54 24 L32 33 Z" fill="${s.light}" stroke="${s.edge}" stroke-width="1"/>
+   <path d="M10 24 L10 40 L32 49 L32 33 Z" fill="${s.mid}"/>
+   <path d="M54 24 L54 40 L32 49 L32 33 Z" fill="${s.dark}"/>
+   ${extra}`;
+
+const switch3D = (s: Shades): string => box3D(s, arrows4(32, 24, 14, 5.5, 2.2));
+
+const l3switch3D = (s: Shades): string => box3D(s,
+  `<text x="20" y="45" font-size="9" font-family="monospace" font-weight="bold" fill="#fff">L3</text>` +
+  arrows4(34, 23, 11, 4.5, 1.9));
+
+const server3D = (s: Shades): string =>
+  `<path d="M19 14 L32 8 L45 14 L32 20 Z" fill="${s.light}" stroke="${s.edge}" stroke-width="1"/>
+   <path d="M19 14 L19 50 L32 56 L32 20 Z" fill="${s.mid}"/>
+   <path d="M45 14 L45 50 L32 56 L32 20 Z" fill="${s.dark}"/>
+   <g stroke="${s.edge}" stroke-width="1" opacity="0.7">
+     <line x1="22" y1="25" x2="29" y2="28.5"/>
+     <line x1="22" y1="31" x2="29" y2="34.5"/>
+     <line x1="22" y1="37" x2="29" y2="40.5"/>
+   </g>`;
+
+const firewall3D = (s: Shades): string =>
+  `<path d="M32 7 L53 14 L53 31 C53 43 44 51 32 56 C20 51 11 43 11 31 L11 14 Z" fill="${s.light}" stroke="${s.edge}" stroke-width="1.2"/>
+   <path d="M32 7 L32 56 C20 51 11 43 11 31 L11 14 Z" fill="${s.mid}"/>
+   <g stroke="${s.dark}" stroke-width="1.5" fill="none" opacity="0.9">
+     <line x1="11" y1="24" x2="53" y2="24"/><line x1="11" y1="38" x2="53" y2="38"/>
+     <line x1="32" y1="14" x2="32" y2="24"/><line x1="21" y1="24" x2="21" y2="38"/>
+     <line x1="43" y1="24" x2="43" y2="38"/><line x1="32" y1="38" x2="32" y2="50"/>
+   </g>`;
+
+const BUILDERS: Record<string, (s: Shades) => string> = {
+  router: puck3D, router_modern: puck3D, router_3d: puck3D, router_cloud: puck3D,
+  switch: switch3D, l3switch: l3switch3D,
+  server: server3D,
+  firewall: firewall3D,
+};
+
 export const ICON_KEYS = Object.keys(PATHS);
 
 interface IconProps {
@@ -177,7 +261,9 @@ export function getDeviceIcon(type: DeviceType, opts: IconProps = {}): React.Rea
 
   // Cor: override fixo (opts.color) tem prioridade sobre cor por status
   const color = opts.color ?? statusColor(opts.status);
-  const inner = PATHS[type] ?? PATHS.generic;
+  // Ícones 3D (tingidos pela cor) têm prioridade; o resto cai nos PATHS (currentColor)
+  const builder = BUILDERS[type];
+  const inner = builder ? builder(shades(color)) : (PATHS[type] ?? PATHS.generic);
 
   return (
     <svg

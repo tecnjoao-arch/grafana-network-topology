@@ -24,7 +24,10 @@
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: fit-view preenche a tela \\(mede nos + reserva pros cards\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: auto-fit nao re-dispara a cada refresh \\(o mapa '\\\\''ampliava e voltava'\\\\''\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: modal por interface estilo detalhamento, traco duplo sem deformar, orange 90%, setas no card *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: traco duplo bidirecional limpo + grafico do modal com eixo Y legivel *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: traco duplo bidirecional limpo + grafico do modal com eixo Y legivel *)",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: icones 3D isometricos tingidos pelo status \\(roteador/switch/L3/server/firewall\\) *)"
     ]
   }
 }
