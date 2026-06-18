@@ -60,6 +60,40 @@ function distToSegment(p: Pt, a: Pt, b: Pt): number {
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
+/** Interseção de duas retas (infinitas) a-b e c-d. null se paralelas. */
+function lineIntersect(a: Pt, b: Pt, c: Pt, d: Pt): Pt | null {
+  const r1x = b.x - a.x, r1y = b.y - a.y;
+  const r2x = d.x - c.x, r2y = d.y - c.y;
+  const denom = r1x * r2y - r1y * r2x;
+  if (Math.abs(denom) < 1e-6) return null;
+  const t = ((c.x - a.x) * r2y - (c.y - a.y) * r2x) / denom;
+  return { x: a.x + t * r1x, y: a.y + t * r1y };
+}
+
+/** Polilinha paralela deslocada por `d`: desloca cada segmento perpendicular e
+ *  acha os cantos pela interseção dos segmentos vizinhos (sem overshoot/deformação
+ *  do método ponto-a-ponto antigo). Usado p/ as duas raias do traçado duplo. */
+function offsetPolyline(pts: Pt[], d: number): Pt[] {
+  if (pts.length < 2) return pts.slice();
+  const segs: Array<{ a: Pt; b: Pt }> = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const dx = pts[i + 1].x - pts[i].x, dy = pts[i + 1].y - pts[i].y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = (-dy / len) * d, ny = (dx / len) * d;
+    segs.push({ a: { x: pts[i].x + nx, y: pts[i].y + ny }, b: { x: pts[i + 1].x + nx, y: pts[i + 1].y + ny } });
+  }
+  const out: Pt[] = [segs[0].a];
+  for (let i = 0; i < segs.length - 1; i++) {
+    out.push(lineIntersect(segs[i].a, segs[i].b, segs[i + 1].a, segs[i + 1].b) ?? segs[i].b);
+  }
+  out.push(segs[segs.length - 1].b);
+  return out;
+}
+
+function ptsToPath(pts: Pt[]): string {
+  return pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+}
+
 
 export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }) => {
   const sourceNode = useInternalNode(source);
@@ -370,35 +404,52 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
       <path id={id} d={edgePath} fill="none" stroke="none" style={{ pointerEvents: 'none' }} />
 
       {isDouble ? (
-        // Traçado duplo: faixa na cor + núcleo na cor de fundo, ambos sobre o
-        // MESMO edgePath. Assim acompanha qualquer formato (reto/orto/curvo) sem
-        // deformar nas pontas (o método antigo, deslocando perpendicular ponto a
-        // ponto, distorcia nos cantos). Animação opcional flui na faixa externa.
+        // Traçado duplo: duas raias paralelas seguindo a rota. Quando animado,
+        // cada uma corre num sentido (uma indo, outra voltando = bidirecional).
+        // O offset por interseção de segmentos mantém os cantos limpos.
         (() => {
           const active = animation !== 'none';
-          const bandW = Math.max(5, strokeWidth * 1.6);   // largura total da faixa
-          const coreW = Math.max(2, bandW * 0.42);          // vão central (cor de fundo)
-          const bg = ((data as any)?.panelBg as string) ?? '#020617';
+          const sep = Math.max(3, strokeWidth * 0.8);
+          const strandW = Math.max(2, strokeWidth * 0.6);
+          const dash = active ? '12 9' : '0';
+          // Rota como polilinha: reta usa os pontos; ortogonal insere o canto em 90°.
+          let route: Pt[] = points;
+          if (pathType === 'step') {
+            route = [points[0]];
+            for (let i = 0; i < points.length - 1; i++) {
+              const A = points[i], B = points[i + 1];
+              const dx = Math.abs(B.x - A.x), dy = Math.abs(B.y - A.y);
+              if (dx > 0.5 && dy > 0.5) {
+                const goHoriz = dx >= dy;
+                const sh = data?.flipBends ? !goHoriz : goHoriz;
+                route.push(sh ? { x: B.x, y: A.y } : { x: A.x, y: B.y });
+              }
+              route.push(B);
+            }
+          }
+          const pathA = ptsToPath(offsetPolyline(route, sep));
+          const pathB = ptsToPath(offsetPolyline(route, -sep));
           return (
             <>
               <path
-                d={edgePath}
+                d={pathA}
                 fill="none"
                 stroke={color}
-                strokeWidth={bandW}
-                strokeDasharray={active ? '14 10' : '0'}
-                strokeLinecap="round"
+                strokeWidth={strandW}
+                strokeDasharray={dash}
+                strokeLinecap={round ? 'round' : 'butt'}
                 strokeLinejoin="round"
                 style={{ animation: active ? 'fc-flow 1s linear infinite' : undefined, pointerEvents: 'none' }}
               />
               <path
-                d={edgePath}
+                d={pathB}
                 fill="none"
-                stroke={bg}
-                strokeWidth={coreW}
-                strokeLinecap="round"
+                stroke={color}
+                strokeWidth={strandW}
+                strokeDasharray={dash}
+                strokeLinecap={round ? 'round' : 'butt'}
                 strokeLinejoin="round"
-                style={{ pointerEvents: 'none' }}
+                style={{ animation: active ? 'fc-flow-rev 1s linear infinite' : undefined, pointerEvents: 'none' }}
               />
             </>
           );

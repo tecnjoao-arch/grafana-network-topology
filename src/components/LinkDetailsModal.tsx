@@ -266,30 +266,32 @@ const SideCard: React.FC<{ side: SideInfo; accent: string }> = ({ side, accent }
   </div>
 );
 
-/** Gráfico de área (SVG) com Inbound (verde), Outbound (azul) e linha de Speed. */
+/** Gráfico de área (SVG) com Inbound (verde), Outbound (azul) e eixo Y em bps. */
 const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries; speed?: number; title: string }> = ({ inbound, outbound, speed, title }) => {
-  const W = 580, H = 170, P = 8;
+  const W = 580, H = 180, PT = 10, PB = 22, PR = 10, PL = 56; // margens (esq. p/ rótulos do eixo)
   const all = [...(inbound?.values ?? []), ...(outbound?.values ?? [])];
   if (all.length === 0) return null;
   const tAll = [...(inbound?.times ?? []), ...(outbound?.times ?? [])];
   const peak = Math.max(...all) || 1;
-  // Se a capacidade está definida e é maior que o pico, o teto do gráfico vai até
-  // a capacidade — assim a linha de Speed aparece no topo e dá pra ver a folga.
-  const vMax = (speed && speed > peak ? speed : peak) * 1.06;
+  // Escala SEMPRE pelo tráfego (pico), pra ser legível. A capacidade (ex: 400G)
+  // não estica o eixo — senão um link a 6% de uso vira um risquinho no fundo.
+  const vMax = peak * 1.18;
   const tMin = Math.min(...tAll);
   const tMax = Math.max(...tAll);
   const span = Math.max(1, tMax - tMin);
-  const px = (t: number) => P + ((t - tMin) / span) * (W - 2 * P);
-  const py = (v: number) => H - P - (v / vMax) * (H - 2 * P);
+  const px = (t: number) => PL + ((t - tMin) / span) * (W - PL - PR);
+  const py = (v: number) => H - PB - (v / vMax) * (H - PT - PB);
   const line = (s?: BindingSeries) =>
     s && s.values.length
       ? s.values.map((v, i) => `${i ? 'L' : 'M'} ${px(s.times[i]).toFixed(1)} ${py(v).toFixed(1)}`).join(' ')
       : '';
   const area = (s?: BindingSeries) =>
     s && s.values.length
-      ? `${line(s)} L ${px(s.times[s.times.length - 1]).toFixed(1)} ${H - P} L ${px(s.times[0]).toFixed(1)} ${H - P} Z`
+      ? `${line(s)} L ${px(s.times[s.times.length - 1]).toFixed(1)} ${H - PB} L ${px(s.times[0]).toFixed(1)} ${H - PB} Z`
       : '';
   const fmtT = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const ticks = [0, 0.25, 0.5, 0.75, 1]; // eixo Y: 5 níveis
+  const speedFits = speed !== undefined && speed <= vMax;
 
   return (
     <div style={{ border: '1px solid #1e293b', borderRadius: 8, background: 'rgba(30,41,59,0.4)', padding: '10px 12px' }}>
@@ -298,21 +300,30 @@ const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries
         <span>
           <span style={{ color: IN_COLOR }}>● Inbound</span>
           <span style={{ color: OUT_COLOR, marginLeft: 10 }}>● Outbound</span>
-          {speed !== undefined && <span style={{ color: '#94a3b8', marginLeft: 10 }}>– – Speed</span>}
+          {speedFits && <span style={{ color: '#94a3b8', marginLeft: 10 }}>– – Speed</span>}
         </span>
       </div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
-        {[0.25, 0.5, 0.75].map((f) => (
-          <line key={f} x1={P} x2={W - P} y1={P + f * (H - 2 * P)} y2={P + f * (H - 2 * P)} stroke="rgba(255,255,255,0.05)" />
-        ))}
+        {/* Eixo Y: grade + rótulos em bps */}
+        {ticks.map((f) => {
+          const y = py(vMax * f);
+          return (
+            <g key={f}>
+              <line x1={PL} x2={W - PR} y1={y} y2={y} stroke="rgba(255,255,255,0.06)" />
+              <text x={PL - 6} y={y + 3} textAnchor="end" fontSize={9.5} fill="#64748b" fontFamily="monospace">
+                {f === 0 ? '0' : formatBitsPerSec(vMax * f)}
+              </text>
+            </g>
+          );
+        })}
         {outbound && <path d={area(outbound)} fill="rgba(59,130,246,0.12)" />}
         {inbound && <path d={area(inbound)} fill="rgba(34,197,94,0.12)" />}
         {outbound && <path d={line(outbound)} fill="none" stroke={OUT_COLOR} strokeWidth={1.6} />}
         {inbound && <path d={line(inbound)} fill="none" stroke={IN_COLOR} strokeWidth={1.6} />}
-        {speed !== undefined && speed <= vMax && (
+        {speedFits && (
           <>
-            <line x1={P} x2={W - P} y1={py(speed)} y2={py(speed)} stroke="#94a3b8" strokeWidth={1} strokeDasharray="6 5" />
-            <text x={W - P} y={py(speed) - 4} textAnchor="end" fontSize={10} fill="#94a3b8">Speed {formatBitsPerSec(speed)}</text>
+            <line x1={PL} x2={W - PR} y1={py(speed!)} y2={py(speed!)} stroke="#94a3b8" strokeWidth={1} strokeDasharray="6 5" />
+            <text x={W - PR} y={py(speed!) - 4} textAnchor="end" fontSize={10} fill="#94a3b8">Speed {formatBitsPerSec(speed!)}</text>
           </>
         )}
       </svg>

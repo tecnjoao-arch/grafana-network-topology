@@ -356,8 +356,6 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         // Escala da fonte injetada: o card (LinkEdge) usa pra afastar os labels
         // proporcionalmente, senão eles colidem ao aumentar a escala.
         fontScale: options.fontScale ?? 1,
-        // Cor de fundo do painel: o traçado duplo usa pra desenhar o "vão" central.
-        panelBg: options.theme === 'light' ? '#f8fafc' : '#020617',
       } as LinkEdgeData;
       return {
         id: e.id,

@@ -23,7 +23,8 @@
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: tracado por threshold, fontScale nao desalinha cards, fit/lock do painel *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: fit-view preenche a tela \\(mede nos + reserva pros cards\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: auto-fit nao re-dispara a cada refresh \\(o mapa '\\\\''ampliava e voltava'\\\\''\\) *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: modal por interface estilo detalhamento, traco duplo sem deformar, orange 90%, setas no card *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: modal por interface estilo detalhamento, traco duplo sem deformar, orange 90%, setas no card *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: traco duplo bidirecional limpo + grafico do modal com eixo Y legivel *)"
     ]
   }
 }
