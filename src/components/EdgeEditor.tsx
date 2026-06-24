@@ -1,10 +1,11 @@
 // components/EdgeEditor.tsx — Painel de edição da aresta selecionada.
 // Cor, traçado, animação, espessura e nomes de interface. Portal p/ document.body.
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { LinkEdgeData, LineStyle, LineAnimation, LINE_STYLES, LINE_ANIMATIONS, PathType, PATH_TYPES, LabelFooter, LABEL_FOOTERS } from '../types';
 import { MetricBinding, Aggregation } from '../utils/dataBinding';
+import { discoverInterfaces, DiscoveredInterface } from '../utils/discovery';
 import { SeriesCombo } from './SeriesCombo';
 
 interface Props {
@@ -64,6 +65,42 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
   const [speedText, setSpeedText] = useState('');
   // Thresholds ativos = cor/animação manuais viram só reserva (quando nenhuma regra casa)
   const thresholdsActive = !!(data.statusBinding?.match && (data.colorMappings?.length ?? 0) > 0);
+
+  // Interfaces detectadas no datasource → auto-preenchimento de um lado inteiro
+  const interfaces = useMemo(() => discoverInterfaces(seriesKeys), [seriesKeys]);
+
+  /** Preenche todos os bindings de um lado (e os globais) a partir de uma interface detectada. */
+  const autoFill = (intf: DiscoveredInterface, side: 'source' | 'target') => {
+    const m = intf.metrics;
+    const bind = (key?: string): MetricBinding | undefined => (key ? { match: key, aggregation: 'last' } : undefined);
+    const patch: Partial<LinkEdgeData> = { showTrafficBox: true };
+    if (side === 'source') {
+      patch.sourceInterface = intf.iface;
+      if (m.inbound) patch.sourceTrafficUpBinding = bind(m.inbound);
+      if (m.outbound) patch.sourceTrafficDownBinding = bind(m.outbound);
+      if (m.errors) patch.sourceErrorBinding = bind(m.errors);
+      if (m.ip) patch.sourceIpBinding = bind(m.ip);
+      if (m.domTx) patch.sourceDomTxPowerBinding = bind(m.domTx);
+      if (m.domRx) patch.sourceDomRxPowerBinding = bind(m.domRx);
+      if (m.domTemp) patch.sourceDomTempBinding = bind(m.domTemp);
+      if (m.domVolt) patch.sourceDomVoltBinding = bind(m.domVolt);
+      if (m.domBias) patch.sourceDomBiasBinding = bind(m.domBias);
+    } else {
+      patch.targetInterface = intf.iface;
+      if (m.inbound) patch.targetTrafficUpBinding = bind(m.inbound);
+      if (m.outbound) patch.targetTrafficDownBinding = bind(m.outbound);
+      if (m.errors) patch.targetErrorBinding = bind(m.errors);
+      if (m.ip) patch.targetIpBinding = bind(m.ip);
+      if (m.domTx) patch.targetDomTxPowerBinding = bind(m.domTx);
+      if (m.domRx) patch.targetDomRxPowerBinding = bind(m.domRx);
+      if (m.domTemp) patch.targetDomTempBinding = bind(m.domTemp);
+      if (m.domVolt) patch.targetDomVoltBinding = bind(m.domVolt);
+      if (m.domBias) patch.targetDomBiasBinding = bind(m.domBias);
+    }
+    if (m.speed) patch.speedBinding = bind(m.speed);
+    if (m.status) patch.statusBinding = bind(m.status);
+    onChange(patch);
+  };
 
   const patchBinding = (
     key:
@@ -479,10 +516,23 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
         {/* ── Binding de dados (Zabbix etc) ── */}
         <div style={{ borderTop: '1px solid #334155', paddingTop: 12, marginTop: 2 }}>
           <Section title="Dados ao vivo (binding)">
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
-              Cole parte do nome da série (host/interface). Aceita regex.
+            {/* ⚡ Auto-preenchimento: escolhe uma interface detectada e preenche o lado inteiro */}
+            <div style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid #6b21a8', borderRadius: 6, padding: 10, marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 'bold', color: '#c084fc', marginBottom: 2 }}>
+                ⚡ Auto-preenchimento ({interfaces.length} interfaces detectadas)
+              </div>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8 }}>
+                Escolha a interface de cada lado — preenche tráfego, erros, IP, DOM e capacidade de uma vez.
+              </div>
+              <AutoFillPicker label={`Lado A → ${sourceLabel}`} interfaces={interfaces} onPick={(i) => autoFill(i, 'source')} />
+              <div style={{ height: 6 }} />
+              <AutoFillPicker label={`Lado B → ${targetLabel}`} interfaces={interfaces} onPick={(i) => autoFill(i, 'target')} />
             </div>
-            
+
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+              Ou ajuste manualmente — cole parte do nome da série. Aceita regex.
+            </div>
+
             <div style={{ marginTop: 8, marginBottom: 4, fontSize: 11, color: '#3b82f6', fontWeight: 'bold' }}>
               Lado A (Origem - {sourceLabel})
             </div>
@@ -692,6 +742,33 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
       </div>
     </div>,
     document.body
+  );
+};
+
+/** Seletor filtrável de interface detectada; ao escolher uma exata, dispara onPick. */
+const AutoFillPicker: React.FC<{
+  label: string;
+  interfaces: DiscoveredInterface[];
+  onPick: (i: DiscoveredInterface) => void;
+}> = ({ label, interfaces, onPick }) => {
+  const [val, setVal] = useState('');
+  const labels = useMemo(() => interfaces.map((i) => i.label), [interfaces]);
+  return (
+    <div>
+      <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 3 }}>{label}</div>
+      <div style={{ display: 'flex' }}>
+        <SeriesCombo
+          value={val}
+          seriesKeys={labels}
+          placeholder="digite o host / interface…"
+          onChange={(v) => {
+            setVal(v);
+            const found = interfaces.find((i) => i.label === v);
+            if (found) onPick(found);
+          }}
+        />
+      </div>
+    </div>
   );
 };
 

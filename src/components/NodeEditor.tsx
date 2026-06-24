@@ -1,10 +1,11 @@
 // components/NodeEditor.tsx — Painel de edição do nó selecionado.
 // Label, IP, tipo de equipamento, cor, statusBinding.
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { DeviceNodeData, DeviceType } from '../types';
 import { MetricBinding, Aggregation } from '../utils/dataBinding';
+import { discoverHosts } from '../utils/discovery';
 import { useEditor } from './EditorContext';
 import { SeriesCombo } from './SeriesCombo';
 
@@ -50,7 +51,21 @@ export const NodeEditor: React.FC<Props> = ({
   onClose,
 }) => {
   const [showSeries, setShowSeries] = useState(false);
+  const [hostPick, setHostPick] = useState('');
   const { duplicateNode } = useEditor();
+
+  // Hosts detectados → preenche nome + binding de status do equipamento
+  const hosts = useMemo(() => discoverHosts(seriesKeys), [seriesKeys]);
+  const hostLabels = useMemo(() => hosts.map((h) => `${h.host} (${h.ifaceCount} ifaces)`), [hosts]);
+  const onPickHost = (label: string) => {
+    setHostPick(label);
+    const h = hosts.find((x) => `${x.host} (${x.ifaceCount} ifaces)` === label);
+    if (!h) return;
+    onChange({
+      label: h.host,
+      statusBinding: h.statusKey ? { match: h.statusKey, aggregation: 'last' } : data.statusBinding,
+    });
+  };
 
   const patchBinding = (patch: Partial<MetricBinding>) => {
     const cur: MetricBinding = data.statusBinding ?? { match: '', aggregation: 'last' };
@@ -111,6 +126,22 @@ export const NodeEditor: React.FC<Props> = ({
       </div>
 
       <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {hosts.length > 0 && (
+          <div style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid #6b21a8', borderRadius: 6, padding: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 'bold', color: '#c084fc', marginBottom: 2 }}>
+              ⚡ Auto-preenchimento ({hosts.length} hosts detectados)
+            </div>
+            <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8 }}>
+              Escolha o host — preenche o nome e o binding de status.
+            </div>
+            <SeriesCombo
+              value={hostPick}
+              seriesKeys={hostLabels}
+              placeholder="digite o host…"
+              onChange={onPickHost}
+            />
+          </div>
+        )}
         <Section title="Propriedades Básicas">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <input
