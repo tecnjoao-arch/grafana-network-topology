@@ -86,6 +86,8 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
   const util = linkUtilization(Math.max(data?.trafficUp ?? 0, data?.trafficDown ?? 0), data?.linkSpeed);
   const utilPct = (util * 100).toFixed(1);
   const status = data?.status ?? 'unknown';
+  const statusAccent =
+    status === 'down' ? '#ef4444' : status === 'warning' ? '#f59e0b' : status === 'up' ? '#22c55e' : '#64748b';
 
   const src = getSide(data, 'source', sourceLabel);
   const tgt = getSide(data, 'target', targetLabel);
@@ -118,6 +120,8 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
           boxShadow: '0 20px 60px rgba(0,0,0,0.7)', overflow: 'hidden',
         }}
       >
+        {/* Faixa de status no topo */}
+        <div style={{ height: 4, background: statusAccent }} />
         {/* Header */}
         <div
           style={{
@@ -209,10 +213,10 @@ const FocusedView: React.FC<{ side: SideInfo; speed?: number }> = ({ side, speed
         <Metric label="Erros / Descartes" value={side.errors !== undefined ? String(side.errors) : '0'} color={side.errors && side.errors > 0 ? '#ef4444' : '#22c55e'} big />
       </div>
 
-      {/* Linha 2: Utilização por direção */}
+      {/* Linha 2: Utilização por direção (com barra) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-        <Metric label="Util RX" value={utilRx !== undefined ? `${utilRx.toFixed(1)}%` : '—'} color={utilColor(utilRx)} />
-        <Metric label="Util TX" value={utilTx !== undefined ? `${utilTx.toFixed(1)}%` : '—'} color={utilColor(utilTx)} />
+        <Metric label="Util RX" value={utilRx !== undefined ? `${utilRx.toFixed(1)}%` : '—'} color={utilColor(utilRx)} bar={utilRx} />
+        <Metric label="Util TX" value={utilTx !== undefined ? `${utilTx.toFixed(1)}%` : '—'} color={utilColor(utilTx)} bar={utilTx} />
         {side.ip && <Metric label="Endereço IP" value={side.ip} color="#cbd5e1" mono />}
       </div>
 
@@ -233,11 +237,16 @@ const FocusedView: React.FC<{ side: SideInfo; speed?: number }> = ({ side, speed
   );
 };
 
-/** Cartão de métrica reutilizável (estilo do print de referência). */
-const Metric: React.FC<{ label: string; value: string; color: string; big?: boolean; mono?: boolean }> = ({ label, value, color, big, mono }) => (
+/** Cartão de métrica reutilizável (estilo do print de referência). bar = 0..100 opcional. */
+const Metric: React.FC<{ label: string; value: string; color: string; big?: boolean; mono?: boolean; bar?: number }> = ({ label, value, color, big, mono, bar }) => (
   <div style={{ background: '#0b1220', border: `1px solid ${color}33`, borderRadius: 8, padding: big ? '12px 14px' : '10px 12px' }}>
     <div style={{ fontSize: 10.5, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
-    <div style={{ marginTop: 4, color, fontSize: big ? 19 : 15, fontWeight: 700, fontFamily: mono ? 'monospace' : 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+    <div style={{ marginTop: 4, color, fontSize: big ? 19 : 15, fontWeight: 700, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+    {bar !== undefined && (
+      <div style={{ height: 4, background: '#1e293b', borderRadius: 2, overflow: 'hidden', marginTop: 6 }}>
+        <div style={{ width: `${Math.min(100, Math.max(0, bar))}%`, height: '100%', background: color }} />
+      </div>
+    )}
   </div>
 );
 

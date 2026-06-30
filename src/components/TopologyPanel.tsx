@@ -856,6 +856,7 @@ const TopologyInner: React.FC<InnerProps> = ({
           data={hoveredEdge.data as LinkEdgeData}
           sourceLabel={findNodeLabel(hoveredEdge.source)}
           targetLabel={findNodeLabel(hoveredEdge.target)}
+          series={data?.series ?? []}
           x={hover.x}
           y={hover.y}
         />

@@ -29,7 +29,8 @@
       "mcp__visualize__show_widget",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: icones 3D isometricos tingidos pelo status \\(roteador/switch/L3/server/firewall\\) *)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: auto-deteccao de hosts/interfaces \\(auto-preenchimento de bindings\\) *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: auto-deteccao de hosts/interfaces \\(auto-preenchimento de bindings\\) *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: hover com mini-grafico + cores unificadas + polimento do modal *)"
     ]
   }
 }
