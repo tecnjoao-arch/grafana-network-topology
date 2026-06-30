@@ -770,8 +770,9 @@ const TopologyInner: React.FC<InnerProps> = ({
       // No modo edição: clicar abre o editor de propriedades da linha
       setEditingEdgeId(edge.id);
     } else {
-      // Fora do modo edição: clicar mostra detalhes/tráfego
-      setClicked({ edgeId: edge.id });
+      // Fora do modo edição: abre o modal da interface de ORIGEM (um lado só).
+      // O modal nunca mostra os dois lados — cada interface tem o seu.
+      setClicked({ edgeId: edge.id, side: 'source' });
     }
   }, [options.editMode]);
 

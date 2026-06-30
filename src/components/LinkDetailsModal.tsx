@@ -9,7 +9,6 @@ import { DataFrame } from '@grafana/data';
 import { LinkEdgeData, MetricBinding } from '../types';
 import { formatBitsPerSec, linkUtilization } from '../utils/format';
 import { resolveBindingSeries, BindingSeries } from '../utils/dataBinding';
-import { Sparkline } from './Sparkline';
 
 interface Props {
   edgeId: string;
@@ -92,17 +91,18 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
 
   const src = getSide(data, 'source', sourceLabel);
   const tgt = getSide(data, 'target', targetLabel);
-  const focus = focusSide === 'source' ? src : focusSide === 'target' ? tgt : null;
+  // O modal SEMPRE mostra uma única interface (nunca os dois lados).
+  // Sem lado definido (ex: clique na linha) → origem por padrão.
+  const focus = focusSide === 'target' ? tgt : src;
 
-  // Séries históricas (memo): no foco, da interface escolhida; senão, do lado origem.
-  const chartSide = focus ?? src;
+  // Séries históricas da interface em foco.
   const inHist = React.useMemo(
-    () => resolveBindingSeries(series, chartSide.inboundBinding),
-    [series, chartSide.inboundBinding]
+    () => resolveBindingSeries(series, focus.inboundBinding),
+    [series, focus.inboundBinding]
   );
   const outHist = React.useMemo(
-    () => resolveBindingSeries(series, chartSide.outboundBinding),
-    [series, chartSide.outboundBinding]
+    () => resolveBindingSeries(series, focus.outboundBinding),
+    [series, focus.outboundBinding]
   );
 
   return createPortal(
@@ -132,27 +132,17 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
           }}
         >
           <div>
-            <div style={{ fontSize: 12, color: '#94a3b8', letterSpacing: 0.4 }}>
-              {focus ? 'Detalhes da interface' : 'Detalhes do link'}
+            <div style={{ fontSize: 12, color: '#94a3b8', letterSpacing: 0.4 }}>Detalhes da interface</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+              <span style={{ background: focusSide === 'target' ? '#10b981' : '#3b82f6', color: '#06281d', fontSize: 10, fontWeight: 700, letterSpacing: 0.6, padding: '2px 8px', borderRadius: 4 }}>
+                {focusSide === 'target' ? 'DESTINO' : 'ORIGEM'}
+              </span>
+              <span style={{ fontSize: 18, fontWeight: 700 }}>{focus.label}</span>
+              {focus.iface && <span style={{ color: '#22d3ee', fontFamily: 'monospace', fontSize: 14 }}>{focus.iface}</span>}
             </div>
-            {focus ? (
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                  <span style={{ background: focusSide === 'target' ? '#10b981' : '#3b82f6', color: '#06281d', fontSize: 10, fontWeight: 700, letterSpacing: 0.6, padding: '2px 8px', borderRadius: 4 }}>
-                    {focusSide === 'target' ? 'DESTINO' : 'ORIGEM'}
-                  </span>
-                  <span style={{ fontSize: 18, fontWeight: 700 }}>{focus.label}</span>
-                  {focus.iface && <span style={{ color: '#22d3ee', fontFamily: 'monospace', fontSize: 14 }}>{focus.iface}</span>}
-                </div>
-                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 400, marginTop: 3 }}>
-                  ↔ link com {focus === src ? targetLabel : sourceLabel}
-                </div>
-              </div>
-            ) : (
-              <div style={{ fontSize: 16, fontWeight: 600 }}>
-                {sourceLabel} {data.sourceInterface ? `(${data.sourceInterface})` : ''} <span style={{ color: '#475569' }}>↔</span> {targetLabel} {data.targetInterface ? `(${data.targetInterface})` : ''}
-              </div>
-            )}
+            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 400, marginTop: 3 }}>
+              ↔ link com {focus === src ? targetLabel : sourceLabel}
+            </div>
           </div>
           <button onClick={onClose} style={btnX}>✕</button>
         </div>
@@ -167,29 +157,19 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
             )}
           </div>
 
-          {focus ? (
-            <>
-              <FocusedView side={focus} speed={data.linkSpeed} />
-              {/* Gráfico grande só na visão focada (já é claramente daquela interface) */}
-              {(inHist || outHist) ? (
-                <div style={{ marginTop: 16 }}>
-                  <TrafficChart inbound={inHist} outbound={outHist} speed={data.linkSpeed} title={`Histórico · ${focus.iface ?? focus.label}`} />
-                </div>
-              ) : (
-                <div style={emptyChart}>
-                  <div style={{ fontSize: 26, marginBottom: 6 }}>📈</div>
-                  <div>Sem histórico para exibir</div>
-                  <div style={{ fontSize: 11, marginTop: 4, color: '#475569' }}>
-                    Configure os bindings de tráfego desta interface no modo edição.
-                  </div>
-                </div>
-              )}
-            </>
+          {/* Sempre uma única interface: métricas + gráfico no padrão Grafana */}
+          <FocusedView side={focus} speed={data.linkSpeed} />
+          {(inHist || outHist) ? (
+            <div style={{ marginTop: 16 }}>
+              <TrafficChart inbound={inHist} outbound={outHist} speed={data.linkSpeed} title={`Histórico · ${focus.iface ?? focus.label}`} />
+            </div>
           ) : (
-            // Visão geral: cada lado é autocontido (métricas + gráfico próprio).
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <SideCard side={src} accent="#3b82f6" pill="ORIGEM" series={series} />
-              <SideCard side={tgt} accent="#10b981" pill="DESTINO" series={series} />
+            <div style={emptyChart}>
+              <div style={{ fontSize: 26, marginBottom: 6 }}>📈</div>
+              <div>Sem histórico para exibir</div>
+              <div style={{ fontSize: 11, marginTop: 4, color: '#475569' }}>
+                Configure os bindings de tráfego desta interface no modo edição.
+              </div>
             </div>
           )}
         </div>
@@ -257,45 +237,6 @@ const Metric: React.FC<{ label: string; value: string; color: string; big?: bool
     )}
   </div>
 );
-
-/** Cartão de um lado na visão geral — autocontido, com gráfico próprio daquele lado. */
-const SideCard: React.FC<{ side: SideInfo; accent: string; pill: string; series: DataFrame[] }> = ({ side, accent, pill, series }) => {
-  const inHist = React.useMemo(() => resolveBindingSeries(series, side.inboundBinding), [series, side.inboundBinding]);
-  const outHist = React.useMemo(() => resolveBindingSeries(series, side.outboundBinding), [series, side.outboundBinding]);
-  return (
-    <div style={{ background: '#0b1220', border: `1px solid ${accent}40`, borderRadius: 8, padding: 12, borderTop: `3px solid ${accent}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
-        <span style={{ background: accent, color: '#06281d', fontSize: 9, fontWeight: 700, letterSpacing: 0.6, padding: '2px 7px', borderRadius: 4 }}>{pill}</span>
-        <span style={{ fontSize: 12.5, fontWeight: 700, fontFamily: 'monospace' }}>{side.label}</span>
-      </div>
-      <div style={{ fontSize: 11, color: '#22d3ee', fontFamily: 'monospace', marginBottom: 10 }}>{side.iface ?? '—'}</div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <Field label="↓ Inbound" value={formatBitsPerSec(side.inbound)} color={IN_COLOR} />
-        <Field label="↑ Outbound" value={formatBitsPerSec(side.outbound)} color={OUT_COLOR} />
-      </div>
-
-      {(inHist || outHist) && (
-        <div style={{ border: '1px solid #1e293b', borderRadius: 5, background: 'rgba(30,41,59,0.35)', padding: 3, marginTop: 10 }}>
-          <Sparkline inbound={inHist} outbound={outHist} h={50} />
-        </div>
-      )}
-
-      {(side.errors !== undefined || side.ip) && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
-          {side.ip && <Field label="IP" value={side.ip} mono />}
-          {side.errors !== undefined && <Field label="Erros" value={String(side.errors)} color={side.errors > 0 ? '#ef4444' : '#94a3b8'} />}
-        </div>
-      )}
-      {hasDom(side) && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, borderTop: '1px dashed #1e293b', paddingTop: 10 }}>
-          <Field label="Tx" value={side.domTx !== undefined ? `${side.domTx.toFixed(2)} dBm` : '—'} color="#4ade80" mono />
-          <Field label="Rx" value={side.domRx !== undefined ? `${side.domRx.toFixed(2)} dBm` : '—'} color="#60a5fa" mono />
-        </div>
-      )}
-    </div>
-  );
-};
 
 /** Arredonda pra um teto "bonito" (1, 2, 2.5, 5 × 10^n) — eixo Y com valores redondos. */
 function niceCeil(v: number): number {
