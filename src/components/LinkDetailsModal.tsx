@@ -135,11 +135,16 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
               {focus ? 'Detalhes da interface' : 'Detalhes do link'}
             </div>
             {focus ? (
-              <div style={{ fontSize: 17, fontWeight: 700 }}>
-                {focus.label}
-                {focus.iface && <span style={{ color: '#22d3ee', fontFamily: 'monospace', marginLeft: 8 }}>{focus.iface}</span>}
-                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 400, marginTop: 2 }}>
-                  link com {focus === src ? targetLabel : sourceLabel}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                  <span style={{ background: focusSide === 'target' ? '#10b981' : '#3b82f6', color: '#06281d', fontSize: 10, fontWeight: 700, letterSpacing: 0.6, padding: '2px 8px', borderRadius: 4 }}>
+                    {focusSide === 'target' ? 'DESTINO' : 'ORIGEM'}
+                  </span>
+                  <span style={{ fontSize: 18, fontWeight: 700 }}>{focus.label}</span>
+                  {focus.iface && <span style={{ color: '#22d3ee', fontFamily: 'monospace', fontSize: 14 }}>{focus.iface}</span>}
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 400, marginTop: 3 }}>
+                  ↔ link com {focus === src ? targetLabel : sourceLabel}
                 </div>
               </div>
             ) : (

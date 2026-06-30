@@ -98,7 +98,7 @@ function ptsToPath(pts: Pt[]): string {
 export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }) => {
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
-  const { editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, openLinkDetails } = useEditor();
+  const { editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, openLinkDetails, hoverLink, unhoverLink } = useEditor();
   const { screenToFlowPosition } = useReactFlow();
 
   const [localWp, setLocalWp] = useState<Pt[]>(data?.waypoints ?? []);
@@ -515,6 +515,8 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             onDragMove={onLabelMove}
             onDragUp={onLabelUp}
             onOpenDetails={!editMode && openLinkDetails ? () => openLinkDetails(id, 'source') : undefined}
+            onHover={!editMode && hoverLink ? (e) => hoverLink(id, 'source', e.clientX, e.clientY) : undefined}
+            onHoverEnd={!editMode && unhoverLink ? unhoverLink : undefined}
           />
         )}
         {data?.targetInterface && (
@@ -537,6 +539,8 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             onDragMove={onLabelMove}
             onDragUp={onLabelUp}
             onOpenDetails={!editMode && openLinkDetails ? () => openLinkDetails(id, 'target') : undefined}
+            onHover={!editMode && hoverLink ? (e) => hoverLink(id, 'target', e.clientX, e.clientY) : undefined}
+            onHoverEnd={!editMode && unhoverLink ? unhoverLink : undefined}
           />
         )}
       </EdgeLabelRenderer>
@@ -589,7 +593,10 @@ const IfLabel: React.FC<{
   onDragUp?: (e: React.PointerEvent) => void;
   /** Fora do modo edição: clique abre o modal com os detalhes desta interface */
   onOpenDetails?: () => void;
-}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, draggable, onDragDown, onDragMove, onDragUp, onOpenDetails }) => {
+  /** Hover → tooltip deste lado específico */
+  onHover?: (e: React.MouseEvent) => void;
+  onHoverEnd?: () => void;
+}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, draggable, onDragDown, onDragMove, onDragUp, onOpenDetails, onHover, onHoverEnd }) => {
   const [copied, setCopied] = useState(false);
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation(); // não abrir o modal ao copiar IP
@@ -606,6 +613,9 @@ const IfLabel: React.FC<{
       onPointerMove={draggable ? onDragMove : undefined}
       onPointerUp={draggable ? onDragUp : undefined}
       onClick={!draggable && onOpenDetails ? onOpenDetails : undefined}
+      onMouseEnter={!draggable ? onHover : undefined}
+      onMouseMove={!draggable ? onHover : undefined}
+      onMouseLeave={!draggable ? onHoverEnd : undefined}
       title={draggable ? 'Arraste para reposicionar o card' : (onOpenDetails ? 'Clique para ver os detalhes desta interface' : undefined)}
       style={{
         position: 'absolute',

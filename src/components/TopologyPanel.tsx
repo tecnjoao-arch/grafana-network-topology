@@ -160,6 +160,8 @@ type Props = PanelProps<PanelOptions>;
 
 interface HoverState {
   edgeId: string;
+  /** Lado/interface em foco no tooltip (hover num card específico) */
+  side?: 'source' | 'target';
   x: number;
   y: number;
 }
@@ -768,6 +770,12 @@ const TopologyInner: React.FC<InnerProps> = ({
     setClicked({ edgeId, side });
   }, []);
 
+  // Hover num card de interface → tooltip daquele lado
+  const hoverLink = useCallback((edgeId: string, side: 'source' | 'target', x: number, y: number) => {
+    setHover({ edgeId, side, x, y });
+  }, []);
+  const unhoverLink = useCallback(() => setHover(null), []);
+
   // Resolve labels da source/target a partir do edge
   const findEdge = (id: string) => edges.find((e) => e.id === id);
   const findNodeLabel = (id: string) => (nodes.find((n) => n.id === id)?.data as any)?.label ?? id;
@@ -777,7 +785,7 @@ const TopologyInner: React.FC<InnerProps> = ({
   const editingEdge = editingEdgeId ? findEdge(editingEdgeId) : null;
 
   return (
-    <EditorProvider value={{ editMode: !!options.editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, deleteEdge, setNodeData: setNodeDataPatch, deleteNode, duplicateNode, openLinkDetails }}>
+    <EditorProvider value={{ editMode: !!options.editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, deleteEdge, setNodeData: setNodeDataPatch, deleteNode, duplicateNode, openLinkDetails, hoverLink, unhoverLink }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -857,6 +865,7 @@ const TopologyInner: React.FC<InnerProps> = ({
           sourceLabel={findNodeLabel(hoveredEdge.source)}
           targetLabel={findNodeLabel(hoveredEdge.target)}
           series={data?.series ?? []}
+          focusSide={hover.side}
           x={hover.x}
           y={hover.y}
         />

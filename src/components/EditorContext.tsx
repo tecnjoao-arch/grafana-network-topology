@@ -24,6 +24,9 @@ interface EditorCtx {
   /** Fora do modo edição: abre o modal de detalhes do link, opcionalmente
    *  focado num lado (interface) específico. */
   openLinkDetails?: (edgeId: string, side?: 'source' | 'target') => void;
+  /** Hover num card de interface → tooltip daquele lado específico. */
+  hoverLink?: (edgeId: string, side: 'source' | 'target', x: number, y: number) => void;
+  unhoverLink?: () => void;
 }
 
 const Ctx = createContext<EditorCtx>({
@@ -36,6 +39,8 @@ const Ctx = createContext<EditorCtx>({
   deleteNode: () => {},
   duplicateNode: () => {},
   openLinkDetails: () => {},
+  hoverLink: () => {},
+  unhoverLink: () => {},
 });
 
 export const EditorProvider: React.FC<{ value: EditorCtx; children: React.ReactNode }> = ({ value, children }) => (
