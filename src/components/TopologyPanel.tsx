@@ -26,6 +26,11 @@ import { resolveBinding, resolveTextBinding, listSeriesKeys, setStaleThresholdMs
 let __idSeq = 0;
 const genId = (prefix: string) => `${prefix}-${Date.now()}-${(__idSeq++).toString(36)}`;
 
+// Comparação barata de data resolvida — usada no sync pra preservar a identidade
+// dos objetos que não mudaram (assim o React Flow não re-renderiza tudo a cada
+// edição; só o nó/aresta que de fato mudou ganha objeto novo).
+const sameData = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 const Sidebar: React.FC<{
   showIp: boolean;
   onToggleIp: () => void;
@@ -367,7 +372,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         data: liveData as any,
       };
     }),
-    [topology, series, showIp, searchQuery, hideTrafficCards]
+    [topology, series, showIp, searchQuery, hideTrafficCards, options.fontScale]
   );
 
   return (
@@ -532,14 +537,32 @@ const TopologyInner: React.FC<InnerProps> = ({
   useEffect(() => {
     if (draggingRef.current) return;
     setNodes((curr) => {
+      const prevById = new Map(curr.map((n) => [n.id, n]));
       const sel = new Set(curr.filter((n) => n.selected).map((n) => n.id));
-      return sel.size ? initialNodes.map((n) => (sel.has(n.id) ? { ...n, selected: true } : n)) : initialNodes;
+      return initialNodes.map((n) => {
+        const selected = sel.has(n.id);
+        const prev = prevById.get(n.id);
+        // Reusa o objeto anterior se nada mudou → React Flow pula a re-renderização deste nó.
+        if (prev && !!prev.selected === selected && prev.position === n.position && sameData(prev.data, n.data)) {
+          return prev;
+        }
+        return selected ? { ...n, selected: true } : n;
+      });
     });
   }, [initialNodes, setNodes]);
   useEffect(() => {
     setEdges((curr) => {
+      const prevById = new Map(curr.map((e) => [e.id, e]));
       const sel = new Set(curr.filter((e) => e.selected).map((e) => e.id));
-      return sel.size ? initialEdges.map((e) => (sel.has(e.id) ? { ...e, selected: true } : e)) : initialEdges;
+      return initialEdges.map((e) => {
+        const selected = sel.has(e.id);
+        const prev = prevById.get(e.id);
+        // Identidade preservada p/ arestas inalteradas → só a aresta editada re-renderiza.
+        if (prev && !!prev.selected === selected && sameData(prev.data, e.data)) {
+          return prev;
+        }
+        return selected ? { ...e, selected: true } : e;
+      });
     });
   }, [initialEdges, setEdges]);
 
