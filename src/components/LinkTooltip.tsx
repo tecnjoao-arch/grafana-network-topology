@@ -70,54 +70,40 @@ export const LinkTooltip: React.FC<Props> = ({ data, sourceLabel, targetLabel, s
     <div
       style={{
         position: 'fixed', left: x + 16, top: y + 16, pointerEvents: 'none', zIndex: 1000,
-        background: 'rgba(11, 18, 32, 0.98)', border: `1px solid ${s.pill ? s.pillColor : statusColor}`, borderRadius: 8,
+        background: 'rgba(11, 18, 32, 0.98)', border: `1px solid ${statusColor}`, borderRadius: 8,
         fontSize: 12, color: '#e2e8f0', fontFamily: 'inherit',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.6)', width: 250, overflow: 'hidden',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.6)', width: 280, overflow: 'hidden',
       }}
     >
-      {/* Header */}
+      {/* Header: equipamento + interface */}
       <div style={{ padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid #1e293b' }}>
-        {s.pill ? (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-              <span style={{ background: s.pillColor, color: '#06281d', fontSize: 9, fontWeight: 700, letterSpacing: 0.6, padding: '2px 7px', borderRadius: 4 }}>
-                {s.pill}
-              </span>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor }} />
-              <span style={{ fontWeight: 700, fontSize: 13 }}>{s.device}</span>
-            </div>
-            <div style={{ fontSize: 11, color: '#22d3ee', fontFamily: 'monospace' }}>{s.iface ?? '—'}</div>
-            <div style={{ fontSize: 9.5, color: '#64748b', marginTop: 1 }}>↔ {s.other}</div>
-          </>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
-            <span style={{ fontWeight: 600, fontSize: 12.5 }}>{sourceLabel} <span style={{ color: '#475569' }}>↔</span> {targetLabel}</span>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
+          <span style={{ fontWeight: 700, fontSize: 13 }}>{s.device}</span>
+          <span style={{ fontSize: 11.5, color: '#22d3ee', fontFamily: 'monospace' }}>{s.iface ?? '—'}</span>
+        </div>
+        <div style={{ fontSize: 9.5, color: '#64748b', marginTop: 2 }}>↔ {s.other}</div>
       </div>
 
-      <div style={{ padding: 10 }}>
-        {/* Inbound / Outbound do lado */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-          <div>
-            <div style={{ fontSize: 9.5, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>↓ Inbound</div>
-            <div style={{ color: IN_COLOR, fontWeight: 700, fontFamily: 'monospace', fontSize: 15 }}>{formatBitsPerSec(s.inbound)}</div>
+      <div style={{ padding: 8 }}>
+        {/* Gráfico em destaque */}
+        {(inHist || outHist) ? (
+          <div style={{ border: '1px solid #1e293b', borderRadius: 6, background: 'rgba(30,41,59,0.35)', padding: 4 }}>
+            <Sparkline inbound={inHist} outbound={outHist} h={84} />
           </div>
-          <div>
-            <div style={{ fontSize: 9.5, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>↑ Outbound</div>
-            <div style={{ color: OUT_COLOR, fontWeight: 700, fontFamily: 'monospace', fontSize: 15 }}>{formatBitsPerSec(s.outbound)}</div>
-          </div>
-        </div>
-
-        {/* Mini-gráfico do lado */}
-        {(inHist || outHist) && (
-          <div style={{ border: '1px solid #1e293b', borderRadius: 5, background: 'rgba(30,41,59,0.35)', padding: 3, marginBottom: 6 }}>
-            <Sparkline inbound={inHist} outbound={outHist} h={44} />
+        ) : (
+          <div style={{ height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, color: '#475569', border: '1px dashed #1e293b', borderRadius: 6 }}>
+            sem histórico
           </div>
         )}
 
-        <div style={{ fontSize: 9.5, color: '#475569', fontStyle: 'italic', textAlign: 'center' }}>clique para detalhes da interface</div>
+        {/* In/Out discreto, abaixo do gráfico */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, fontFamily: 'monospace', marginTop: 6, padding: '0 2px' }}>
+          <span><span style={{ color: IN_COLOR }}>↓ in</span> <span style={{ fontWeight: 600 }}>{formatBitsPerSec(s.inbound)}</span></span>
+          <span><span style={{ color: OUT_COLOR }}>↑ out</span> <span style={{ fontWeight: 600 }}>{formatBitsPerSec(s.outbound)}</span></span>
+        </div>
+
+        <div style={{ fontSize: 9, color: '#475569', fontStyle: 'italic', textAlign: 'center', marginTop: 6 }}>clique para detalhes</div>
       </div>
     </div>,
     document.body

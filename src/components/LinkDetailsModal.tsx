@@ -9,6 +9,7 @@ import { DataFrame } from '@grafana/data';
 import { LinkEdgeData, MetricBinding } from '../types';
 import { formatBitsPerSec, linkUtilization } from '../utils/format';
 import { resolveBindingSeries, BindingSeries } from '../utils/dataBinding';
+import { Sparkline } from './Sparkline';
 
 interface Props {
   edgeId: string;
@@ -167,26 +168,28 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
           </div>
 
           {focus ? (
-            <FocusedView side={focus} speed={data.linkSpeed} />
+            <>
+              <FocusedView side={focus} speed={data.linkSpeed} />
+              {/* Gráfico grande só na visão focada (já é claramente daquela interface) */}
+              {(inHist || outHist) ? (
+                <div style={{ marginTop: 16 }}>
+                  <TrafficChart inbound={inHist} outbound={outHist} speed={data.linkSpeed} title={`Histórico · ${focus.iface ?? focus.label}`} />
+                </div>
+              ) : (
+                <div style={emptyChart}>
+                  <div style={{ fontSize: 26, marginBottom: 6 }}>📈</div>
+                  <div>Sem histórico para exibir</div>
+                  <div style={{ fontSize: 11, marginTop: 4, color: '#475569' }}>
+                    Configure os bindings de tráfego desta interface no modo edição.
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
+            // Visão geral: cada lado é autocontido (métricas + gráfico próprio).
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <SideCard side={src} accent="#3b82f6" />
-              <SideCard side={tgt} accent="#10b981" />
-            </div>
-          )}
-
-          {/* Gráfico histórico */}
-          {(inHist || outHist) ? (
-            <div style={{ marginTop: 16 }}>
-              <TrafficChart inbound={inHist} outbound={outHist} speed={data.linkSpeed} title={focus ? `Histórico · ${focus.iface ?? focus.label}` : 'Histórico no período do dashboard'} />
-            </div>
-          ) : (
-            <div style={emptyChart}>
-              <div style={{ fontSize: 26, marginBottom: 6 }}>📈</div>
-              <div>Sem histórico para exibir</div>
-              <div style={{ fontSize: 11, marginTop: 4, color: '#475569' }}>
-                Configure os bindings de tráfego (Inbound/Outbound) deste link no modo edição.
-              </div>
+              <SideCard side={src} accent="#3b82f6" pill="ORIGEM" series={series} />
+              <SideCard side={tgt} accent="#10b981" pill="DESTINO" series={series} />
             </div>
           )}
         </div>
@@ -255,30 +258,44 @@ const Metric: React.FC<{ label: string; value: string; color: string; big?: bool
   </div>
 );
 
-/** Cartão de um lado na visão geral (dois lados). */
-const SideCard: React.FC<{ side: SideInfo; accent: string }> = ({ side, accent }) => (
-  <div style={{ background: '#0b1220', border: '1px solid #1e293b', borderRadius: 8, padding: 12 }}>
-    <div style={{ fontSize: 12, fontWeight: 700, color: accent, marginBottom: 10, fontFamily: 'monospace' }}>
-      {side.label}{side.iface ? ` · ${side.iface}` : ''}
-    </div>
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-      <Field label="Inbound" value={formatBitsPerSec(side.inbound)} color={IN_COLOR} />
-      <Field label="Outbound" value={formatBitsPerSec(side.outbound)} color={OUT_COLOR} />
-    </div>
-    {(side.errors !== undefined || side.ip) && (
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
-        {side.ip && <Field label="IP" value={side.ip} mono />}
-        {side.errors !== undefined && <Field label="Erros" value={String(side.errors)} color={side.errors > 0 ? '#ef4444' : '#94a3b8'} />}
+/** Cartão de um lado na visão geral — autocontido, com gráfico próprio daquele lado. */
+const SideCard: React.FC<{ side: SideInfo; accent: string; pill: string; series: DataFrame[] }> = ({ side, accent, pill, series }) => {
+  const inHist = React.useMemo(() => resolveBindingSeries(series, side.inboundBinding), [series, side.inboundBinding]);
+  const outHist = React.useMemo(() => resolveBindingSeries(series, side.outboundBinding), [series, side.outboundBinding]);
+  return (
+    <div style={{ background: '#0b1220', border: `1px solid ${accent}40`, borderRadius: 8, padding: 12, borderTop: `3px solid ${accent}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
+        <span style={{ background: accent, color: '#06281d', fontSize: 9, fontWeight: 700, letterSpacing: 0.6, padding: '2px 7px', borderRadius: 4 }}>{pill}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 700, fontFamily: 'monospace' }}>{side.label}</span>
       </div>
-    )}
-    {hasDom(side) && (
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, borderTop: '1px dashed #1e293b', paddingTop: 10 }}>
-        <Field label="Tx" value={side.domTx !== undefined ? `${side.domTx.toFixed(2)} dBm` : '—'} color="#4ade80" mono />
-        <Field label="Rx" value={side.domRx !== undefined ? `${side.domRx.toFixed(2)} dBm` : '—'} color="#60a5fa" mono />
+      <div style={{ fontSize: 11, color: '#22d3ee', fontFamily: 'monospace', marginBottom: 10 }}>{side.iface ?? '—'}</div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <Field label="↓ Inbound" value={formatBitsPerSec(side.inbound)} color={IN_COLOR} />
+        <Field label="↑ Outbound" value={formatBitsPerSec(side.outbound)} color={OUT_COLOR} />
       </div>
-    )}
-  </div>
-);
+
+      {(inHist || outHist) && (
+        <div style={{ border: '1px solid #1e293b', borderRadius: 5, background: 'rgba(30,41,59,0.35)', padding: 3, marginTop: 10 }}>
+          <Sparkline inbound={inHist} outbound={outHist} h={50} />
+        </div>
+      )}
+
+      {(side.errors !== undefined || side.ip) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+          {side.ip && <Field label="IP" value={side.ip} mono />}
+          {side.errors !== undefined && <Field label="Erros" value={String(side.errors)} color={side.errors > 0 ? '#ef4444' : '#94a3b8'} />}
+        </div>
+      )}
+      {hasDom(side) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, borderTop: '1px dashed #1e293b', paddingTop: 10 }}>
+          <Field label="Tx" value={side.domTx !== undefined ? `${side.domTx.toFixed(2)} dBm` : '—'} color="#4ade80" mono />
+          <Field label="Rx" value={side.domRx !== undefined ? `${side.domRx.toFixed(2)} dBm` : '—'} color="#60a5fa" mono />
+        </div>
+      )}
+    </div>
+  );
+};
 
 /** Gráfico de área (SVG) com Inbound (verde), Outbound (azul) e eixo Y em bps. */
 const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries; speed?: number; title: string }> = ({ inbound, outbound, speed, title }) => {
