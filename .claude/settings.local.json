@@ -31,7 +31,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: auto-deteccao de hosts/interfaces \\(auto-preenchimento de bindings\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: hover com mini-grafico + cores unificadas + polimento do modal *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: hover por card \\(lado especifico\\) com selo ORIGEM/DESTINO + tooltip sem barra de util *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: hover por card \\(lado especifico\\) com selo ORIGEM/DESTINO + tooltip sem barra de util *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: hover so por card \\(sem brigar com a linha\\) + remove title nativo \\(barra branca\\) *)"
     ]
   }
 }

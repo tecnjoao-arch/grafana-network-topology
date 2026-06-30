@@ -739,14 +739,8 @@ const TopologyInner: React.FC<InnerProps> = ({
     });
   }, [onNodesChange, options, topology, onOptionsChange, setNodes]);
 
-  // Handlers de tooltip
-  const onEdgeMouseEnter = useCallback((evt: React.MouseEvent, edge: Edge) => {
-    setHover({ edgeId: edge.id, x: evt.clientX, y: evt.clientY });
-  }, []);
-  const onEdgeMouseMove = useCallback((evt: React.MouseEvent, edge: Edge) => {
-    setHover({ edgeId: edge.id, x: evt.clientX, y: evt.clientY });
-  }, []);
-  const onEdgeMouseLeave = useCallback(() => setHover(null), []);
+  // O tooltip é acionado por hover NO CARD da interface (via hoverLink/unhoverLink),
+  // não pela linha — assim mostra sempre o lado certo, sem brigar com o hover da aresta.
   const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
     setHover(null);
     if (options.editMode) {
@@ -808,9 +802,6 @@ const TopologyInner: React.FC<InnerProps> = ({
         zoomOnDoubleClick={options.editMode || !locked}
         minZoom={0.15}
         maxZoom={4}
-        onEdgeMouseEnter={onEdgeMouseEnter}
-        onEdgeMouseMove={onEdgeMouseMove}
-        onEdgeMouseLeave={onEdgeMouseLeave}
         onEdgeClick={onEdgeClick}
         onNodeClick={onNodeClick}
         onConnectStart={handleConnectStart}

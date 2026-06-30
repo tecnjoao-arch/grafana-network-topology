@@ -616,7 +616,7 @@ const IfLabel: React.FC<{
       onMouseEnter={!draggable ? onHover : undefined}
       onMouseMove={!draggable ? onHover : undefined}
       onMouseLeave={!draggable ? onHoverEnd : undefined}
-      title={draggable ? 'Arraste para reposicionar o card' : (onOpenDetails ? 'Clique para ver os detalhes desta interface' : undefined)}
+      title={draggable ? 'Arraste para reposicionar o card' : undefined}
       style={{
         position: 'absolute',
         transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`,
@@ -650,7 +650,6 @@ const IfLabel: React.FC<{
       {ip && (
         <span
           onClick={handleCopy}
-          title="Clique para copiar o IP"
           style={{
             color: copied ? '#4ade80' : '#22d3ee',
             fontSize: '0.9em',
