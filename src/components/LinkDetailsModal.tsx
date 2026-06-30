@@ -297,16 +297,38 @@ const SideCard: React.FC<{ side: SideInfo; accent: string; pill: string; series:
   );
 };
 
-/** Gráfico de área (SVG) com Inbound (verde), Outbound (azul) e eixo Y em bps. */
+/** Arredonda pra um teto "bonito" (1, 2, 2.5, 5 × 10^n) — eixo Y com valores redondos. */
+function niceCeil(v: number): number {
+  if (v <= 0) return 1;
+  const exp = Math.floor(Math.log10(v));
+  const base = Math.pow(10, exp);
+  const f = v / base;
+  const nf = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10;
+  return nf * base;
+}
+
+/** Formata bps compacto pro eixo (sem zeros à toa): 500 Mb/s, 1 Gb/s, 1.5 Gb/s. */
+function fmtAxis(bps: number): string {
+  if (bps === 0) return '0';
+  const units: Array<[number, string]> = [[1e12, 'Tb/s'], [1e9, 'Gb/s'], [1e6, 'Mb/s'], [1e3, 'kb/s']];
+  for (const [v, s] of units) {
+    if (bps >= v) {
+      const n = bps / v;
+      const str = n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
+      return str.replace(/\.?0+$/, '') + ' ' + s;
+    }
+  }
+  return bps.toFixed(0) + ' b/s';
+}
+
+/** Gráfico de área estilo Grafana: eixo Y redondo, eixo X com horários, áreas e legenda. */
 const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries; speed?: number; title: string }> = ({ inbound, outbound, speed, title }) => {
-  const W = 580, H = 180, PT = 10, PB = 22, PR = 10, PL = 56; // margens (esq. p/ rótulos do eixo)
+  const W = 580, H = 210, PT = 10, PB = 30, PR = 12, PL = 60;
   const all = [...(inbound?.values ?? []), ...(outbound?.values ?? [])];
   if (all.length === 0) return null;
   const tAll = [...(inbound?.times ?? []), ...(outbound?.times ?? [])];
   const peak = Math.max(...all) || 1;
-  // Escala SEMPRE pelo tráfego (pico), pra ser legível. A capacidade (ex: 400G)
-  // não estica o eixo — senão um link a 6% de uso vira um risquinho no fundo.
-  const vMax = peak * 1.18;
+  const vMax = niceCeil(peak * 1.05); // teto redondo → rótulos limpos no eixo
   const tMin = Math.min(...tAll);
   const tMax = Math.max(...tAll);
   const span = Math.max(1, tMax - tMin);
@@ -321,47 +343,53 @@ const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries
       ? `${line(s)} L ${px(s.times[s.times.length - 1]).toFixed(1)} ${H - PB} L ${px(s.times[0]).toFixed(1)} ${H - PB} Z`
       : '';
   const fmtT = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const ticks = [0, 0.25, 0.5, 0.75, 1]; // eixo Y: 5 níveis
+  const yTicks = [0, 0.2, 0.4, 0.6, 0.8, 1];
+  const xTicks = [0, 0.2, 0.4, 0.6, 0.8, 1];
   const speedFits = speed !== undefined && speed <= vMax;
+  const last = (s?: BindingSeries) => (s && s.values.length ? s.values[s.values.length - 1] : undefined);
 
   return (
-    <div style={{ border: '1px solid #1e293b', borderRadius: 8, background: 'rgba(30,41,59,0.4)', padding: '10px 12px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>
-        <span style={{ fontWeight: 600 }}>📈 {title}</span>
-        <span>
-          <span style={{ color: IN_COLOR }}>● Inbound</span>
-          <span style={{ color: OUT_COLOR, marginLeft: 10 }}>● Outbound</span>
-          {speedFits && <span style={{ color: '#94a3b8', marginLeft: 10 }}>– – Speed</span>}
-        </span>
-      </div>
+    <div style={{ border: '1px solid #1e293b', borderRadius: 8, background: 'rgba(15,23,42,0.6)', padding: '10px 12px' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>{title}</div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
-        {/* Eixo Y: grade + rótulos em bps */}
-        {ticks.map((f) => {
-          const y = py(vMax * f);
+        {/* Grade horizontal + rótulos Y (bps redondos) */}
+        {yTicks.map((f) => {
+          const yv = vMax * f;
+          const y = py(yv);
           return (
-            <g key={f}>
+            <g key={`y${f}`}>
               <line x1={PL} x2={W - PR} y1={y} y2={y} stroke="rgba(255,255,255,0.06)" />
-              <text x={PL - 6} y={y + 3} textAnchor="end" fontSize={9.5} fill="#64748b" fontFamily="monospace">
-                {f === 0 ? '0' : formatBitsPerSec(vMax * f)}
-              </text>
+              <text x={PL - 6} y={y + 3} textAnchor="end" fontSize={9.5} fill="#94a3b8" fontFamily="monospace">{fmtAxis(yv)}</text>
             </g>
           );
         })}
-        {outbound && <path d={area(outbound)} fill="rgba(59,130,246,0.12)" />}
-        {inbound && <path d={area(inbound)} fill="rgba(34,197,94,0.12)" />}
+        {/* Grade vertical + rótulos X (horários) */}
+        {xTicks.map((f) => {
+          const t = tMin + f * span;
+          const xx = px(t);
+          return (
+            <g key={`x${f}`}>
+              <line x1={xx} x2={xx} y1={PT} y2={H - PB} stroke="rgba(255,255,255,0.04)" />
+              <text x={xx} y={H - PB + 13} textAnchor="middle" fontSize={9.5} fill="#94a3b8" fontFamily="monospace">{fmtT(t)}</text>
+            </g>
+          );
+        })}
+        {/* Áreas + linhas */}
+        {outbound && <path d={area(outbound)} fill="rgba(59,130,246,0.22)" />}
+        {inbound && <path d={area(inbound)} fill="rgba(34,197,94,0.22)" />}
         {outbound && <path d={line(outbound)} fill="none" stroke={OUT_COLOR} strokeWidth={1.6} />}
         {inbound && <path d={line(inbound)} fill="none" stroke={IN_COLOR} strokeWidth={1.6} />}
         {speedFits && (
-          <>
-            <line x1={PL} x2={W - PR} y1={py(speed!)} y2={py(speed!)} stroke="#94a3b8" strokeWidth={1} strokeDasharray="6 5" />
-            <text x={W - PR} y={py(speed!) - 4} textAnchor="end" fontSize={10} fill="#94a3b8">Speed {formatBitsPerSec(speed!)}</text>
-          </>
+          <line x1={PL} x2={W - PR} y1={py(speed!)} y2={py(speed!)} stroke="#94a3b8" strokeWidth={1} strokeDasharray="6 5" />
         )}
+        {/* Eixo base */}
+        <line x1={PL} x2={W - PR} y1={H - PB} y2={H - PB} stroke="rgba(255,255,255,0.15)" />
       </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginTop: 4 }}>
-        <span>{fmtT(tMin)}</span>
-        <span>pico: {formatBitsPerSec(Math.max(...all))}</span>
-        <span>{fmtT(tMax)}</span>
+      {/* Legenda com último valor */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 11, color: '#94a3b8', marginTop: 8, paddingLeft: 4 }}>
+        <span><span style={{ color: IN_COLOR }}>●</span> Inbound <span style={{ color: '#64748b' }}>último:</span> <span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{formatBitsPerSec(last(inbound))}</span></span>
+        <span><span style={{ color: OUT_COLOR }}>●</span> Outbound <span style={{ color: '#64748b' }}>último:</span> <span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{formatBitsPerSec(last(outbound))}</span></span>
+        {speed !== undefined && <span><span style={{ color: '#94a3b8' }}>– –</span> Speed <span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{formatBitsPerSec(speed)}</span></span>}
       </div>
     </div>
   );
