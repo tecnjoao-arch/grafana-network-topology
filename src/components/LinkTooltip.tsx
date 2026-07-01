@@ -86,10 +86,10 @@ export const LinkTooltip: React.FC<Props> = ({ data, sourceLabel, targetLabel, s
       </div>
 
       <div style={{ padding: 8 }}>
-        {/* Gráfico em destaque */}
+        {/* Gráfico em destaque, com escala no eixo Y */}
         {(inHist || outHist) ? (
           <div style={{ border: '1px solid #1e293b', borderRadius: 6, background: 'rgba(30,41,59,0.35)', padding: 4 }}>
-            <Sparkline inbound={inHist} outbound={outHist} h={84} />
+            <Sparkline inbound={inHist} outbound={outHist} h={86} w={256} axis />
           </div>
         ) : (
           <div style={{ height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, color: '#475569', border: '1px dashed #1e293b', borderRadius: 6 }}>

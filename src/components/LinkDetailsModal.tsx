@@ -7,7 +7,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { DataFrame } from '@grafana/data';
 import { LinkEdgeData, MetricBinding } from '../types';
-import { formatBitsPerSec, linkUtilization } from '../utils/format';
+import { formatBitsPerSec, linkUtilization, niceCeil, fmtAxisBps } from '../utils/format';
 import { resolveBindingSeries, BindingSeries } from '../utils/dataBinding';
 
 interface Props {
@@ -179,21 +179,11 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
   );
 };
 
-/** % de utilização → cor (verde < 50, amarelo < 80, laranja >= 90). */
-function utilColor(pct?: number): string {
-  if (pct === undefined) return '#94a3b8';
-  if (pct >= 90) return '#f59e0b';
-  if (pct >= 50) return '#facc15';
-  return '#22c55e';
-}
-
 /** Visão focada numa única interface (estilo "detalhamento da interface"). */
 const FocusedView: React.FC<{ side: SideInfo; speed?: number }> = ({ side, speed }) => {
-  const utilRx = speed && speed > 0 && side.inbound !== undefined ? (side.inbound / speed) * 100 : undefined;
-  const utilTx = speed && speed > 0 && side.outbound !== undefined ? (side.outbound / speed) * 100 : undefined;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Linha 1: RX / TX / Speed / Erros */}
+      {/* RX / TX / Speed / Erros */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
         <Metric label="RX atual" value={formatBitsPerSec(side.inbound)} color={IN_COLOR} big />
         <Metric label="TX atual" value={formatBitsPerSec(side.outbound)} color={OUT_COLOR} big />
@@ -201,12 +191,12 @@ const FocusedView: React.FC<{ side: SideInfo; speed?: number }> = ({ side, speed
         <Metric label="Erros / Descartes" value={side.errors !== undefined ? String(side.errors) : '0'} color={side.errors && side.errors > 0 ? '#ef4444' : '#22c55e'} big />
       </div>
 
-      {/* Linha 2: Utilização por direção (com barra) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-        <Metric label="Util RX" value={utilRx !== undefined ? `${utilRx.toFixed(1)}%` : '—'} color={utilColor(utilRx)} bar={utilRx} />
-        <Metric label="Util TX" value={utilTx !== undefined ? `${utilTx.toFixed(1)}%` : '—'} color={utilColor(utilTx)} bar={utilTx} />
-        {side.ip && <Metric label="Endereço IP" value={side.ip} color="#cbd5e1" mono />}
-      </div>
+      {/* IP (quando houver) */}
+      {side.ip && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+          <Metric label="Endereço IP" value={side.ip} color="#cbd5e1" mono />
+        </div>
+      )}
 
       {/* DOM Fibra (se houver) */}
       {hasDom(side) && (
@@ -237,30 +227,6 @@ const Metric: React.FC<{ label: string; value: string; color: string; big?: bool
     )}
   </div>
 );
-
-/** Arredonda pra um teto "bonito" (1, 2, 2.5, 5 × 10^n) — eixo Y com valores redondos. */
-function niceCeil(v: number): number {
-  if (v <= 0) return 1;
-  const exp = Math.floor(Math.log10(v));
-  const base = Math.pow(10, exp);
-  const f = v / base;
-  const nf = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10;
-  return nf * base;
-}
-
-/** Formata bps compacto pro eixo (sem zeros à toa): 500 Mb/s, 1 Gb/s, 1.5 Gb/s. */
-function fmtAxis(bps: number): string {
-  if (bps === 0) return '0';
-  const units: Array<[number, string]> = [[1e12, 'Tb/s'], [1e9, 'Gb/s'], [1e6, 'Mb/s'], [1e3, 'kb/s']];
-  for (const [v, s] of units) {
-    if (bps >= v) {
-      const n = bps / v;
-      const str = n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
-      return str.replace(/\.?0+$/, '') + ' ' + s;
-    }
-  }
-  return bps.toFixed(0) + ' b/s';
-}
 
 /** Gráfico de área estilo Grafana: eixo Y redondo, eixo X com horários, áreas e legenda. */
 const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries; speed?: number; title: string }> = ({ inbound, outbound, speed, title }) => {
@@ -300,7 +266,7 @@ const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries
           return (
             <g key={`y${f}`}>
               <line x1={PL} x2={W - PR} y1={y} y2={y} stroke="rgba(255,255,255,0.06)" />
-              <text x={PL - 6} y={y + 3} textAnchor="end" fontSize={9.5} fill="#94a3b8" fontFamily="monospace">{fmtAxis(yv)}</text>
+              <text x={PL - 6} y={y + 3} textAnchor="end" fontSize={9.5} fill="#94a3b8" fontFamily="monospace">{fmtAxisBps(yv)}</text>
             </g>
           );
         })}

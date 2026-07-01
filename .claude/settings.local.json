@@ -36,7 +36,8 @@
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: hover prioriza grafico \\(in/out discreto embaixo\\) + modal visao geral com grafico por lado *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: grafico do modal no padrao Grafana \\(eixo Y redondo, eixo X com horarios, legenda\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'perf: sync preserva identidade dos nos/arestas \\(fim do freeze ao editar\\) *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: modal SEMPRE de uma unica interface \\(remove visao de dois lados\\) *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: modal SEMPRE de uma unica interface \\(remove visao de dois lados\\) *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: remove quadrados Util TX/RX do modal + escala no eixo Y do grafico do hover *)"
     ]
   }
 }
