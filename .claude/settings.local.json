@@ -37,7 +37,8 @@
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: grafico do modal no padrao Grafana \\(eixo Y redondo, eixo X com horarios, legenda\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'perf: sync preserva identidade dos nos/arestas \\(fim do freeze ao editar\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: modal SEMPRE de uma unica interface \\(remove visao de dois lados\\) *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: remove quadrados Util TX/RX do modal + escala no eixo Y do grafico do hover *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: remove quadrados Util TX/RX do modal + escala no eixo Y do grafico do hover *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: tira tags origem/destino, trafego vira In/Out \\(Tx/Rx so fibra\\), grafico mais proximo da referencia *)"
     ]
   }
 }

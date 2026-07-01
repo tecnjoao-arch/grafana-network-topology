@@ -133,10 +133,7 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
         >
           <div>
             <div style={{ fontSize: 12, color: '#94a3b8', letterSpacing: 0.4 }}>Detalhes da interface</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-              <span style={{ background: focusSide === 'target' ? '#10b981' : '#3b82f6', color: '#06281d', fontSize: 10, fontWeight: 700, letterSpacing: 0.6, padding: '2px 8px', borderRadius: 4 }}>
-                {focusSide === 'target' ? 'DESTINO' : 'ORIGEM'}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 3 }}>
               <span style={{ fontSize: 18, fontWeight: 700 }}>{focus.label}</span>
               {focus.iface && <span style={{ color: '#22d3ee', fontFamily: 'monospace', fontSize: 14 }}>{focus.iface}</span>}
             </div>
@@ -161,7 +158,7 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
           <FocusedView side={focus} speed={data.linkSpeed} />
           {(inHist || outHist) ? (
             <div style={{ marginTop: 16 }}>
-              <TrafficChart inbound={inHist} outbound={outHist} speed={data.linkSpeed} title={`Histórico · ${focus.iface ?? focus.label}`} />
+              <TrafficChart inbound={inHist} outbound={outHist} speed={data.linkSpeed} title={focus.iface ? `${focus.label} · ${focus.iface}` : focus.label} />
             </div>
           ) : (
             <div style={emptyChart}>
@@ -183,10 +180,10 @@ export const LinkDetailsModal: React.FC<Props> = ({ data, sourceLabel, targetLab
 const FocusedView: React.FC<{ side: SideInfo; speed?: number }> = ({ side, speed }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* RX / TX / Speed / Erros */}
+      {/* Inbound / Outbound / Speed / Erros */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-        <Metric label="RX atual" value={formatBitsPerSec(side.inbound)} color={IN_COLOR} big />
-        <Metric label="TX atual" value={formatBitsPerSec(side.outbound)} color={OUT_COLOR} big />
+        <Metric label="↓ Inbound" value={formatBitsPerSec(side.inbound)} color={IN_COLOR} big />
+        <Metric label="↑ Outbound" value={formatBitsPerSec(side.outbound)} color={OUT_COLOR} big />
         <Metric label="Speed" value={speed !== undefined ? formatBitsPerSec(speed) : '—'} color="#cbd5e1" big />
         <Metric label="Erros / Descartes" value={side.errors !== undefined ? String(side.errors) : '0'} color={side.errors && side.errors > 0 ? '#ef4444' : '#22c55e'} big />
       </div>
@@ -251,7 +248,7 @@ const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries
       : '';
   const fmtT = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const yTicks = [0, 0.2, 0.4, 0.6, 0.8, 1];
-  const xTicks = [0, 0.2, 0.4, 0.6, 0.8, 1];
+  const xTicks = [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6, 1];
   const speedFits = speed !== undefined && speed <= vMax;
   const last = (s?: BindingSeries) => (s && s.values.length ? s.values[s.values.length - 1] : undefined);
 
@@ -281,11 +278,11 @@ const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries
             </g>
           );
         })}
-        {/* Áreas + linhas */}
-        {outbound && <path d={area(outbound)} fill="rgba(59,130,246,0.22)" />}
-        {inbound && <path d={area(inbound)} fill="rgba(34,197,94,0.22)" />}
-        {outbound && <path d={line(outbound)} fill="none" stroke={OUT_COLOR} strokeWidth={1.6} />}
-        {inbound && <path d={line(inbound)} fill="none" stroke={IN_COLOR} strokeWidth={1.6} />}
+        {/* Áreas + linhas (verde inbound ao fundo, azul outbound por cima) */}
+        {inbound && <path d={area(inbound)} fill="rgba(34,197,94,0.25)" />}
+        {outbound && <path d={area(outbound)} fill="rgba(59,130,246,0.16)" />}
+        {inbound && <path d={line(inbound)} fill="none" stroke={IN_COLOR} strokeWidth={1.8} />}
+        {outbound && <path d={line(outbound)} fill="none" stroke={OUT_COLOR} strokeWidth={1.8} />}
         {speedFits && (
           <line x1={PL} x2={W - PR} y1={py(speed!)} y2={py(speed!)} stroke="#94a3b8" strokeWidth={1} strokeDasharray="6 5" />
         )}
