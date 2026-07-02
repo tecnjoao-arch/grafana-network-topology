@@ -35,6 +35,15 @@ export function niceCeil(v: number): number {
   return nf * base;
 }
 
+/** Passo "bonito" de eixo (1/2/2.5/5 × 10^n) mais próximo de `raw` — estilo Grafana. */
+export function niceStep(raw: number): number {
+  if (raw <= 0) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / mag;
+  const s = n < 1.5 ? 1 : n < 2.25 ? 2 : n < 3.75 ? 2.5 : n < 7.5 ? 5 : 10;
+  return s * mag;
+}
+
 /** Formata bps compacto pro eixo (sem zeros à toa): 500 Mb/s, 1 Gb/s, 1.5 Gb/s. */
 export function fmtAxisBps(bps: number): string {
   if (bps === 0) return '0';

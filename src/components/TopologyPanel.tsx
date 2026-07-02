@@ -426,25 +426,36 @@ const TopologyInner: React.FC<InnerProps> = ({
   // Painel travado: bloqueia zoom/pan (útil em TV de NOC, evita zoom acidental)
   const [locked, setLocked] = useState(false);
 
-  // Espelho dos nós em ref: o fitToContent lê daqui pra NÃO depender de `nodes`.
-  // Sem isso, o array de nós muda a cada refresh de dados (10s) → o callback
+  // Espelhos em ref: o fitToContent lê daqui pra NÃO depender de `nodes`/`topology`.
+  // Sem isso, os objetos mudam a cada refresh de dados (10s) → o callback
   // mudava → o efeito de auto-fit re-disparava → o mapa "ampliava e voltava".
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
+  const topologyRef = useRef(topology);
+  topologyRef.current = topology;
 
-  // Fit-view que PREENCHE a tela: o fitView padrão mede só os nós e deixa muita
-  // margem. Aqui medimos o bounding box dos nós, reservamos uma margem (em
-  // unidades de flow) proporcional à escala da fonte pros cards das interfaces
-  // que estendem além dos nós, e damos zoom bem justo (padding 0.02).
+  // Fit-view que PREENCHE a tela e centraliza o DESENHO INTEIRO: além dos nós,
+  // inclui os waypoints das arestas (rotas manuais passam por fora dos nós — sem
+  // isso o mapa ficava descentralizado, cortado de um lado e sobrando do outro).
+  // Margem proporcional à escala da fonte reserva espaço pros cards.
   // Estável (só refaz se a escala mudar) → só roda no resize/fit manual, não a cada refresh.
   const fitToContent = useCallback((duration = 300) => {
     const ns = nodesRef.current;
     if (!ns.length) return;
     const b = getNodesBounds(ns);
     if (!b.width || !b.height) return;
+    let minX = b.x, minY = b.y, maxX = b.x + b.width, maxY = b.y + b.height;
+    for (const e of topologyRef.current.edges) {
+      for (const wp of e.data?.waypoints ?? []) {
+        if (wp.x < minX) minX = wp.x;
+        if (wp.y < minY) minY = wp.y;
+        if (wp.x > maxX) maxX = wp.x;
+        if (wp.y > maxY) maxY = wp.y;
+      }
+    }
     const m = 45 * (options.fontScale ?? 1) + 25; // reserva pros labels
     fitBounds(
-      { x: b.x - m, y: b.y - m, width: b.width + m * 2, height: b.height + m * 2 },
+      { x: minX - m, y: minY - m, width: (maxX - minX) + m * 2, height: (maxY - minY) + m * 2 },
       { padding: 0.02, duration }
     );
   }, [options.fontScale, fitBounds]);

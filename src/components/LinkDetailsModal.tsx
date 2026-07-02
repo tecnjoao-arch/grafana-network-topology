@@ -7,7 +7,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { DataFrame } from '@grafana/data';
 import { LinkEdgeData, MetricBinding } from '../types';
-import { formatBitsPerSec, linkUtilization, niceCeil, fmtAxisBps } from '../utils/format';
+import { formatBitsPerSec, linkUtilization, niceCeil, niceStep, fmtAxisBps } from '../utils/format';
 import { resolveBindingSeries, BindingSeries } from '../utils/dataBinding';
 
 interface Props {
@@ -225,8 +225,19 @@ const Metric: React.FC<{ label: string; value: string; color: string; big?: bool
   </div>
 );
 
-/** Gráfico de área estilo Grafana: eixo Y redondo, eixo X com horários, áreas e legenda. */
+/** Marcador de legenda estilo Grafana (segmento de linha, não bolinha). */
+const legendMark = (c: string): React.CSSProperties => ({
+  display: 'inline-block', width: 13, height: 3, background: c, borderRadius: 2,
+  marginRight: 6, verticalAlign: 'middle',
+});
+
+/** Gráfico estilo time series do Grafana: ticks redondos nos dois eixos,
+ *  crosshair com tooltip de valores no hover, legenda com "último". */
 const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries; speed?: number; title: string }> = ({ inbound, outbound, speed, title }) => {
+  const [hover, setHover] = React.useState<{
+    vx: number; pxLeft: number; flip: boolean; label: string; inV?: number; outV?: number;
+  } | null>(null);
+
   const W = 580, H = 210, PT = 10, PB = 30, PR = 12, PL = 60;
   const all = [...(inbound?.values ?? []), ...(outbound?.values ?? [])];
   if (all.length === 0) return null;
@@ -247,52 +258,119 @@ const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries
       ? `${line(s)} L ${px(s.times[s.times.length - 1]).toFixed(1)} ${H - PB} L ${px(s.times[0]).toFixed(1)} ${H - PB} Z`
       : '';
   const fmtT = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const yTicks = [0, 0.2, 0.4, 0.6, 0.8, 1];
-  const xTicks = [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6, 1];
+
+  // Eixo Y: valores em passos redondos (250 Mb/s, 500 Mb/s...) — estilo Grafana
+  const yStep = niceStep(vMax / 5);
+  const yVals: number[] = [];
+  for (let i = 0; i * yStep <= vMax * 1.001; i++) yVals.push(i * yStep);
+
+  // Eixo X: horários redondos (múltiplos de 1/2/5/15/30 min...)
+  const MIN = 60000;
+  const ladder = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440].map((m) => m * MIN);
+  const xStep = ladder.find((s) => s >= span / 6) ?? ladder[ladder.length - 1];
+  const xVals: number[] = [];
+  for (let t = Math.ceil(tMin / xStep) * xStep; t <= tMax; t += xStep) xVals.push(t);
+
   const speedFits = speed !== undefined && speed <= vMax;
   const last = (s?: BindingSeries) => (s && s.values.length ? s.values[s.values.length - 1] : undefined);
+  const nearest = (s: BindingSeries | undefined, t: number): number | undefined => {
+    if (!s || !s.times.length) return undefined;
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < s.times.length; i++) {
+      const d = Math.abs(s.times[i] - t);
+      if (d < bd) { bd = d; best = i; }
+    }
+    return s.values[best];
+  };
+
+  // Crosshair: converte a posição do mouse (px renderizados) pra coordenada do viewBox
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relPx = e.clientX - rect.left;
+    const vx = (relPx / rect.width) * W;
+    if (vx < PL || vx > W - PR) { setHover(null); return; }
+    const t = tMin + ((vx - PL) / (W - PL - PR)) * span;
+    setHover({
+      vx,
+      pxLeft: relPx,
+      flip: relPx > rect.width * 0.58,
+      label: new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      inV: nearest(inbound, t),
+      outV: nearest(outbound, t),
+    });
+  };
 
   return (
     <div style={{ border: '1px solid #1e293b', borderRadius: 8, background: 'rgba(15,23,42,0.6)', padding: '10px 12px' }}>
       <div style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>{title}</div>
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
-        {/* Grade horizontal + rótulos Y (bps redondos) */}
-        {yTicks.map((f) => {
-          const yv = vMax * f;
-          const y = py(yv);
-          return (
-            <g key={`y${f}`}>
-              <line x1={PL} x2={W - PR} y1={y} y2={y} stroke="rgba(255,255,255,0.06)" />
-              <text x={PL - 6} y={y + 3} textAnchor="end" fontSize={9.5} fill="#94a3b8" fontFamily="monospace">{fmtAxisBps(yv)}</text>
+      <div style={{ position: 'relative' }}>
+        <svg
+          width="100%"
+          viewBox={`0 0 ${W} ${H}`}
+          style={{ display: 'block', cursor: 'crosshair' }}
+          onMouseMove={onMove}
+          onMouseLeave={() => setHover(null)}
+        >
+          {/* Grade horizontal + rótulos Y */}
+          {yVals.map((yv) => (
+            <g key={`y${yv}`}>
+              <line x1={PL} x2={W - PR} y1={py(yv)} y2={py(yv)} stroke="rgba(255,255,255,0.06)" />
+              <text x={PL - 6} y={py(yv) + 3} textAnchor="end" fontSize={9.5} fill="#94a3b8" fontFamily="monospace">{fmtAxisBps(yv)}</text>
             </g>
-          );
-        })}
-        {/* Grade vertical + rótulos X (horários) */}
-        {xTicks.map((f) => {
-          const t = tMin + f * span;
-          const xx = px(t);
-          return (
-            <g key={`x${f}`}>
-              <line x1={xx} x2={xx} y1={PT} y2={H - PB} stroke="rgba(255,255,255,0.04)" />
-              <text x={xx} y={H - PB + 13} textAnchor="middle" fontSize={9.5} fill="#94a3b8" fontFamily="monospace">{fmtT(t)}</text>
+          ))}
+          {/* Grade vertical + rótulos X (horários redondos) */}
+          {xVals.map((t) => (
+            <g key={`x${t}`}>
+              <line x1={px(t)} x2={px(t)} y1={PT} y2={H - PB} stroke="rgba(255,255,255,0.04)" />
+              <text x={px(t)} y={H - PB + 13} textAnchor="middle" fontSize={9.5} fill="#94a3b8" fontFamily="monospace">{fmtT(t)}</text>
             </g>
-          );
-        })}
-        {/* Áreas + linhas (verde inbound ao fundo, azul outbound por cima) */}
-        {inbound && <path d={area(inbound)} fill="rgba(34,197,94,0.25)" />}
-        {outbound && <path d={area(outbound)} fill="rgba(59,130,246,0.16)" />}
-        {inbound && <path d={line(inbound)} fill="none" stroke={IN_COLOR} strokeWidth={1.8} />}
-        {outbound && <path d={line(outbound)} fill="none" stroke={OUT_COLOR} strokeWidth={1.8} />}
-        {speedFits && (
-          <line x1={PL} x2={W - PR} y1={py(speed!)} y2={py(speed!)} stroke="#94a3b8" strokeWidth={1} strokeDasharray="6 5" />
+          ))}
+          {/* Áreas + linhas (verde inbound ao fundo, azul outbound por cima) */}
+          {inbound && <path d={area(inbound)} fill="rgba(34,197,94,0.25)" />}
+          {outbound && <path d={area(outbound)} fill="rgba(59,130,246,0.16)" />}
+          {inbound && <path d={line(inbound)} fill="none" stroke={IN_COLOR} strokeWidth={1.5} />}
+          {outbound && <path d={line(outbound)} fill="none" stroke={OUT_COLOR} strokeWidth={1.5} />}
+          {speedFits && (
+            <line x1={PL} x2={W - PR} y1={py(speed!)} y2={py(speed!)} stroke="#94a3b8" strokeWidth={1} strokeDasharray="6 5" />
+          )}
+          {/* Eixo base */}
+          <line x1={PL} x2={W - PR} y1={H - PB} y2={H - PB} stroke="rgba(255,255,255,0.15)" />
+          {/* Crosshair */}
+          {hover && (
+            <g style={{ pointerEvents: 'none' }}>
+              <line x1={hover.vx} x2={hover.vx} y1={PT} y2={H - PB} stroke="#94a3b8" strokeWidth={0.8} />
+              {hover.inV !== undefined && <circle cx={hover.vx} cy={py(hover.inV)} r={3.2} fill={IN_COLOR} stroke="#0b1220" strokeWidth={1} />}
+              {hover.outV !== undefined && <circle cx={hover.vx} cy={py(hover.outV)} r={3.2} fill={OUT_COLOR} stroke="#0b1220" strokeWidth={1} />}
+            </g>
+          )}
+        </svg>
+        {/* Tooltip do crosshair (estilo Grafana) */}
+        {hover && (
+          <div
+            style={{
+              position: 'absolute', top: 6, left: hover.pxLeft,
+              transform: hover.flip ? 'translateX(calc(-100% - 10px))' : 'translateX(10px)',
+              background: '#1b2537', border: '1px solid #334155', borderRadius: 6,
+              padding: '7px 10px', pointerEvents: 'none', minWidth: 158, zIndex: 5,
+              boxShadow: '0 6px 18px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div style={{ fontSize: 11, color: '#cbd5e1', fontWeight: 600, marginBottom: 5 }}>{hover.label}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, fontSize: 11 }}>
+              <span style={{ color: '#94a3b8' }}><span style={legendMark(IN_COLOR)} />Inbound</span>
+              <span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{formatBitsPerSec(hover.inV)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, fontSize: 11, marginTop: 3 }}>
+              <span style={{ color: '#94a3b8' }}><span style={legendMark(OUT_COLOR)} />Outbound</span>
+              <span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{formatBitsPerSec(hover.outV)}</span>
+            </div>
+          </div>
         )}
-        {/* Eixo base */}
-        <line x1={PL} x2={W - PR} y1={H - PB} y2={H - PB} stroke="rgba(255,255,255,0.15)" />
-      </svg>
+      </div>
       {/* Legenda com último valor */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 11, color: '#94a3b8', marginTop: 8, paddingLeft: 4 }}>
-        <span><span style={{ color: IN_COLOR }}>●</span> Inbound <span style={{ color: '#64748b' }}>último:</span> <span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{formatBitsPerSec(last(inbound))}</span></span>
-        <span><span style={{ color: OUT_COLOR }}>●</span> Outbound <span style={{ color: '#64748b' }}>último:</span> <span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{formatBitsPerSec(last(outbound))}</span></span>
+        <span><span style={legendMark(IN_COLOR)} />Inbound <span style={{ color: '#64748b' }}>último:</span> <span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{formatBitsPerSec(last(inbound))}</span></span>
+        <span><span style={legendMark(OUT_COLOR)} />Outbound <span style={{ color: '#64748b' }}>último:</span> <span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{formatBitsPerSec(last(outbound))}</span></span>
         {speed !== undefined && <span><span style={{ color: '#94a3b8' }}>– –</span> Speed <span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{formatBitsPerSec(speed)}</span></span>}
       </div>
     </div>
