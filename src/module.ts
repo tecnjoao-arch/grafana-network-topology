@@ -71,6 +71,15 @@ export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
         defaultValue: DEFAULT_OPTIONS.staleThresholdSec,
         settings: { min: 0, step: 10 },
         category: ['Dados'],
+      })
+      .addTextInput({
+        path: 'globalpingToken',
+        name: 'Token do Globalping (opcional)',
+        description:
+          'Aumenta a cota dos testes de rede (500/h + créditos; sem token: 250/h por IP). ' +
+          'Crie grátis em dash.globalping.io. Atenção: fica visível no JSON do dashboard.',
+        defaultValue: DEFAULT_OPTIONS.globalpingToken,
+        category: ['Dados'],
       });
     return builder;
   });

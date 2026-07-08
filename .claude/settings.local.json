@@ -38,7 +38,12 @@
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'perf: sync preserva identidade dos nos/arestas \\(fim do freeze ao editar\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: modal SEMPRE de uma unica interface \\(remove visao de dois lados\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: remove quadrados Util TX/RX do modal + escala no eixo Y do grafico do hover *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: tira tags origem/destino, trafego vira In/Out \\(Tx/Rx so fibra\\), grafico mais proximo da referencia *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: tira tags origem/destino, trafego vira In/Out \\(Tx/Rx so fibra\\), grafico mais proximo da referencia *)",
+      "WebFetch(domain:globalping.io)",
+      "WebFetch(domain:api.globalping.io)",
+      "Bash(curl -sI -X OPTIONS \"https://api.globalping.io/v1/measurements\" -H \"Origin: https://grafana.cbpf.br\" -H \"Access-Control-Request-Method: POST\" -H \"Access-Control-Request-Headers: content-type\")",
+      "Bash(curl -s -X POST \"https://api.globalping.io/v1/measurements\" -H \"Origin: https://grafana.cbpf.br\" -H \"Content-Type: application/json\" -d \"{\\\\\"type\\\\\":\\\\\"ping\\\\\",\\\\\"target\\\\\":\\\\\"8.8.8.8\\\\\",\\\\\"locations\\\\\":[{\\\\\"magic\\\\\":\\\\\"brazil\\\\\"}],\\\\\"limit\\\\\":1}\" -D - -o NUL)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: testes de rede via Globalping \\(modal dedicado\\) *)"
     ]
   }
 }

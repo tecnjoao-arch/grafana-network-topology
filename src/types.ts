@@ -251,6 +251,9 @@ export interface PanelOptions {
   showLegend: boolean;
   /** Segundos sem atualização para considerar uma métrica obsoleta (status cai). 0 desativa. */
   staleThresholdSec: number;
+  /** Token do Globalping (opcional): aumenta a cota dos testes de rede.
+   *  Atenção: fica visível no JSON do dashboard (risco baixo — só controla cota). */
+  globalpingToken?: string;
 }
 
 export const DEFAULT_OPTIONS: PanelOptions = {
@@ -268,6 +271,7 @@ export const DEFAULT_OPTIONS: PanelOptions = {
   editMode: false,
   showLegend: true,
   staleThresholdSec: 180,
+  globalpingToken: '',
 };
 
 

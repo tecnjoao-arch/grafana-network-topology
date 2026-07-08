@@ -15,6 +15,7 @@ import { DeviceNode } from './nodes/DeviceNode';
 import { LinkEdge } from './edges/LinkEdge';
 import { LinkTooltip } from './LinkTooltip';
 import { LinkDetailsModal } from './LinkDetailsModal';
+import { NetworkTestModal } from './NetworkTestModal';
 import { EdgeEditor } from './EdgeEditor';
 import { NodeEditor } from './NodeEditor';
 import { EditorProvider } from './EditorContext';
@@ -38,23 +39,22 @@ const Sidebar: React.FC<{
   onToggleTraffic: () => void;
   searchQuery: string;
   onSearch: (q: string) => void;
-}> = ({ showIp, onToggleIp, hideTraffic, onToggleTraffic, searchQuery, onSearch }) => {
+  onOpenTest: () => void;
+}> = ({ showIp, onToggleIp, hideTraffic, onToggleTraffic, searchQuery, onSearch, onOpenTest }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   if (!isOpen) {
     return (
-      <button
-        onClick={() => setIsOpen(true)}
-        style={{
-          position: 'absolute', top: 12, left: 12, zIndex: 10,
-          background: 'rgba(15, 23, 42, 0.85)', color: '#cbd5e1', border: '1px solid #334155',
-          borderRadius: 8, padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)',
-        }}
-      >
-        <span style={{ fontSize: 16 }}>🛠️</span>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>Opções</span>
-      </button>
+      <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10, display: 'flex', gap: 8 }}>
+        <button onClick={() => setIsOpen(true)} style={floatBtn}>
+          <span style={{ fontSize: 16 }}>🛠️</span>
+          <span style={{ fontWeight: 600, fontSize: 13 }}>Opções</span>
+        </button>
+        <button onClick={onOpenTest} style={floatBtn} title="Ping / traceroute / MTR a partir de probes externas">
+          <span style={{ fontSize: 16 }}>🌐</span>
+          <span style={{ fontWeight: 600, fontSize: 13 }}>Testes</span>
+        </button>
+      </div>
     );
   }
 
@@ -137,8 +137,26 @@ const Sidebar: React.FC<{
           </div>
         </label>
       </div>
+
+      {/* Testes de rede (Globalping) */}
+      <button
+        onClick={onOpenTest}
+        style={{
+          background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155',
+          borderRadius: 6, padding: '8px 10px', cursor: 'pointer', fontSize: 13,
+          fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8,
+        }}
+      >
+        <span>🌐</span> Testes de rede (ping / trace / MTR)
+      </button>
     </div>
   );
+};
+
+const floatBtn: React.CSSProperties = {
+  background: 'rgba(15, 23, 42, 0.85)', color: '#cbd5e1', border: '1px solid #334155',
+  borderRadius: 8, padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+  boxShadow: '0 4px 12px rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)',
 };
 
 const nodeTypes = { device: DeviceNode };
@@ -190,6 +208,8 @@ export const TopologyPanel: React.FC<Props> = (props) => {
   const [showIp, setShowIp] = useState(false);
   const [hideTrafficCards, setHideTrafficCards] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  // Modal de testes de rede (Globalping): null = fechado; string = alvo inicial
+  const [testTarget, setTestTarget] = useState<string | null>(null);
 
   // Função utilitária para avaliar regra de status
   const evaluateStatus = (value: number | undefined, op?: string, target?: number) => {
@@ -391,6 +411,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
           initialNodes={initialNodes}
           initialEdges={initialEdges}
           topology={topology}
+          onOpenTest={(target) => setTestTarget(target)}
         />
         {!options.editMode && (
           <Sidebar
@@ -400,6 +421,14 @@ export const TopologyPanel: React.FC<Props> = (props) => {
             onToggleTraffic={() => setHideTrafficCards(!hideTrafficCards)}
             searchQuery={searchQuery}
             onSearch={setSearchQuery}
+            onOpenTest={() => setTestTarget('')}
+          />
+        )}
+        {testTarget !== null && (
+          <NetworkTestModal
+            initialTarget={testTarget}
+            token={options.globalpingToken}
+            onClose={() => setTestTarget(null)}
           />
         )}
       </ReactFlowProvider>
@@ -411,10 +440,12 @@ interface InnerProps extends Props {
   initialNodes: Node[];
   initialEdges: Edge[];
   topology: NetworkTopology;
+  /** Abre o modal de testes de rede com um alvo inicial ('' = vazio) */
+  onOpenTest: (target: string) => void;
 }
 
 const TopologyInner: React.FC<InnerProps> = ({
-  initialNodes, initialEdges, topology, options, width, height, onOptionsChange, data,
+  initialNodes, initialEdges, topology, options, width, height, onOptionsChange, data, onOpenTest,
 }) => {
   const seriesKeys = useMemo(() => listSeriesKeys(data?.series ?? []), [data?.series]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -790,8 +821,12 @@ const TopologyInner: React.FC<InnerProps> = ({
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     if (options.editMode) {
       setEditingNodeId(node.id);
+    } else {
+      // Modo visualização: abre o modal de testes de rede com o IP do equipamento.
+      // (Nós com linkUrl não chegam aqui — o DeviceNode abre a URL e para o evento.)
+      onOpenTest(((node.data as any)?.ip as string) ?? '');
     }
-  }, [options.editMode]);
+  }, [options.editMode, onOpenTest]);
 
   // Abre o modal de detalhes focado num lado (clique num card de interface)
   const openLinkDetails = useCallback((edgeId: string, side?: 'source' | 'target') => {
