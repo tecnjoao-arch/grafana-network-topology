@@ -43,7 +43,8 @@
       "WebFetch(domain:api.globalping.io)",
       "Bash(curl -sI -X OPTIONS \"https://api.globalping.io/v1/measurements\" -H \"Origin: https://grafana.cbpf.br\" -H \"Access-Control-Request-Method: POST\" -H \"Access-Control-Request-Headers: content-type\")",
       "Bash(curl -s -X POST \"https://api.globalping.io/v1/measurements\" -H \"Origin: https://grafana.cbpf.br\" -H \"Content-Type: application/json\" -d \"{\\\\\"type\\\\\":\\\\\"ping\\\\\",\\\\\"target\\\\\":\\\\\"8.8.8.8\\\\\",\\\\\"locations\\\\\":[{\\\\\"magic\\\\\":\\\\\"brazil\\\\\"}],\\\\\"limit\\\\\":1}\" -D - -o NUL)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: testes de rede via Globalping \\(modal dedicado\\) *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: testes de rede via Globalping \\(modal dedicado\\) *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: botao direito no equipamento abre os testes de rede *)"
     ]
   }
 }

@@ -828,6 +828,14 @@ const TopologyInner: React.FC<InnerProps> = ({
     }
   }, [options.editMode, onOpenTest]);
 
+  // Botão DIREITO no equipamento → testes de rede. Funciona também nos nós com
+  // linkUrl (onde o clique esquerdo abre o dashboard do equipamento).
+  const onNodeContextMenu = useCallback((e: React.MouseEvent, node: Node) => {
+    if (options.editMode) return;
+    e.preventDefault();
+    onOpenTest(((node.data as any)?.ip as string) ?? '');
+  }, [options.editMode, onOpenTest]);
+
   // Abre o modal de detalhes focado num lado (clique num card de interface)
   const openLinkDetails = useCallback((edgeId: string, side?: 'source' | 'target') => {
     setHover(null);
@@ -874,6 +882,7 @@ const TopologyInner: React.FC<InnerProps> = ({
         maxZoom={4}
         onEdgeClick={onEdgeClick}
         onNodeClick={onNodeClick}
+        onNodeContextMenu={onNodeContextMenu}
         onConnectStart={handleConnectStart}
         onConnect={handleConnect}
         snapToGrid={!!options.editMode}
