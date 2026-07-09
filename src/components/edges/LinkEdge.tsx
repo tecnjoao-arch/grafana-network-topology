@@ -7,7 +7,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { EdgeProps, EdgeLabelRenderer, useInternalNode, useReactFlow, getBezierPath, getSmoothStepPath, Position } from '@xyflow/react';
 import { LinkEdgeData, LabelFooter } from '../../types';
-import { formatBitsPerSec, linkUtilization } from '../../utils/format';
+import { formatBitsPerSec, linkUtilization, splitIps } from '../../utils/format';
 import { getEdgeParams } from '../../utils/floatingEdge';
 import { useEditor } from '../EditorContext';
 
@@ -597,13 +597,13 @@ const IfLabel: React.FC<{
   onHover?: (e: React.MouseEvent) => void;
   onHoverEnd?: () => void;
 }> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, draggable, onDragDown, onDragMove, onDragUp, onOpenDetails, onHover, onHoverEnd }) => {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = (e: React.MouseEvent) => {
+  // Copiar por endereço (IPv4 e IPv6 são linhas separadas no card)
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const copyAddr = (addr: string, idx: number) => (e: React.MouseEvent) => {
     e.stopPropagation(); // não abrir o modal ao copiar IP
-    if (!ip) return;
-    navigator.clipboard.writeText(ip);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    navigator.clipboard.writeText(addr);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 1500);
   };
 
   return (
@@ -647,23 +647,25 @@ const IfLabel: React.FC<{
           <span title={`${errors} erros na interface`} style={{ cursor: 'help', fontSize: '1.2em' }}>⚠️</span>
         )}
       </div>
-      {ip && (
+      {ip && splitIps(ip).map((addr, idx) => (
+        // IPv4 na primeira linha, IPv6 (mais longo) menor na linha de baixo
         <span
-          onClick={handleCopy}
+          key={idx}
+          onClick={copyAddr(addr, idx)}
           style={{
-            color: copied ? '#4ade80' : '#22d3ee',
-            fontSize: '0.9em',
-            marginTop: 2,
+            color: copiedIdx === idx ? '#4ade80' : '#22d3ee',
+            fontSize: idx === 0 ? '0.9em' : '0.78em',
+            marginTop: idx === 0 ? 2 : 1,
             cursor: 'pointer',
-            background: copied ? 'rgba(74, 222, 128, 0.1)' : 'transparent',
+            background: copiedIdx === idx ? 'rgba(74, 222, 128, 0.1)' : 'transparent',
             padding: '1px 3px',
             borderRadius: 2,
             transition: 'all 0.2s',
           }}
         >
-          {copied ? 'Copiado!' : ip}
+          {copiedIdx === idx ? 'Copiado!' : addr}
         </span>
-      )}
+      ))}
       {showTraffic && (tx !== undefined || rx !== undefined) && (
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 3, paddingTop: 3, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.95em', width: '100%' }}>
           <div style={{ color: '#22c55e', display: 'flex', justifyContent: 'space-between', gap: 6 }}>

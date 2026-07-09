@@ -138,17 +138,6 @@ const Sidebar: React.FC<{
         </label>
       </div>
 
-      {/* Testes de rede (Globalping) */}
-      <button
-        onClick={onOpenTest}
-        style={{
-          background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155',
-          borderRadius: 6, padding: '8px 10px', cursor: 'pointer', fontSize: 13,
-          fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8,
-        }}
-      >
-        <span>🌐</span> Testes de rede (ping / trace / MTR)
-      </button>
     </div>
   );
 };
@@ -821,15 +810,13 @@ const TopologyInner: React.FC<InnerProps> = ({
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     if (options.editMode) {
       setEditingNodeId(node.id);
-    } else {
-      // Modo visualização: abre o modal de testes de rede com o IP do equipamento.
-      // (Nós com linkUrl não chegam aqui — o DeviceNode abre a URL e para o evento.)
-      onOpenTest(((node.data as any)?.ip as string) ?? '');
     }
-  }, [options.editMode, onOpenTest]);
+    // Modo visualização: clique esquerdo fica reservado pro linkUrl do nó
+    // (dashboard do equipamento). Testes de rede = botão DIREITO.
+  }, [options.editMode]);
 
-  // Botão DIREITO no equipamento → testes de rede. Funciona também nos nós com
-  // linkUrl (onde o clique esquerdo abre o dashboard do equipamento).
+  // Botão DIREITO no equipamento → única entrada de testes de rede pelo nó
+  // (o esquerdo abre o dashboard via linkUrl). IP do equipamento pré-preenchido.
   const onNodeContextMenu = useCallback((e: React.MouseEvent, node: Node) => {
     if (options.editMode) return;
     e.preventDefault();

@@ -35,6 +35,21 @@ export function niceCeil(v: number): number {
   return nf * base;
 }
 
+/** Divide uma string de endereços vinda do Zabbix ("200.20.96.1 | 2804:1f10::1")
+ *  em linhas separadas: IPv4 primeiro, IPv6 depois, e por fim o que não for IP
+ *  (ex: "Sem IP"). Uma linha por endereço nos cards/modal. */
+export function splitIps(raw?: string): string[] {
+  if (!raw) return [];
+  const parts = raw.split(/[|,;]+/).map((s) => s.trim()).filter(Boolean);
+  if (parts.length <= 1) return parts;
+  const isV4 = (p: string) => /^\d{1,3}(\.\d{1,3}){3}(\/\d+)?$/.test(p);
+  const isV6 = (p: string) => p.includes(':') && /^[0-9a-fA-F:.]+(\/\d+)?$/.test(p);
+  const v4 = parts.filter(isV4);
+  const v6 = parts.filter((p) => !isV4(p) && isV6(p));
+  const rest = parts.filter((p) => !isV4(p) && !isV6(p));
+  return [...v4, ...v6, ...rest];
+}
+
 /** Passo "bonito" de eixo (1/2/2.5/5 × 10^n) mais próximo de `raw` — estilo Grafana. */
 export function niceStep(raw: number): number {
   if (raw <= 0) return 1;

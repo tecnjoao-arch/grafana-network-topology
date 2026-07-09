@@ -44,7 +44,9 @@
       "Bash(curl -sI -X OPTIONS \"https://api.globalping.io/v1/measurements\" -H \"Origin: https://grafana.cbpf.br\" -H \"Access-Control-Request-Method: POST\" -H \"Access-Control-Request-Headers: content-type\")",
       "Bash(curl -s -X POST \"https://api.globalping.io/v1/measurements\" -H \"Origin: https://grafana.cbpf.br\" -H \"Content-Type: application/json\" -d \"{\\\\\"type\\\\\":\\\\\"ping\\\\\",\\\\\"target\\\\\":\\\\\"8.8.8.8\\\\\",\\\\\"locations\\\\\":[{\\\\\"magic\\\\\":\\\\\"brazil\\\\\"}],\\\\\"limit\\\\\":1}\" -D - -o NUL)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: testes de rede via Globalping \\(modal dedicado\\) *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: botao direito no equipamento abre os testes de rede *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: botao direito no equipamento abre os testes de rede *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'docs: INSTALL.md - guia de instalacao em outro Grafana *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: entrada unica de testes, IPv4/IPv6 empilhados, grafico com fallback espelhado *)"
     ]
   }
 }

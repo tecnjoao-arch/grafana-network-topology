@@ -7,7 +7,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { DataFrame } from '@grafana/data';
 import { LinkEdgeData, MetricBinding } from '../types';
-import { formatBitsPerSec, linkUtilization, niceCeil, niceStep, fmtAxisBps } from '../utils/format';
+import { formatBitsPerSec, linkUtilization, niceCeil, niceStep, fmtAxisBps, splitIps } from '../utils/format';
 import { resolveBindingSeries, BindingSeries } from '../utils/dataBinding';
 
 interface Props {
@@ -56,8 +56,10 @@ function getSide(data: LinkEdgeData, which: 'source' | 'target', label: string):
       domBias: data.sourceDomBias,
       domTx: data.sourceDomTxPower,
       domRx: data.sourceDomRxPower,
-      inboundBinding: data.sourceTrafficUpBinding ?? data.trafficUpBinding,
-      outboundBinding: data.sourceTrafficDownBinding ?? data.trafficDownBinding,
+      // Fallback espelhado: num link p2p, o inbound de A é o outbound de B.
+      // Permite gráfico mesmo quando só um dos lados tem binding configurado.
+      inboundBinding: data.sourceTrafficUpBinding ?? data.trafficUpBinding ?? data.targetTrafficDownBinding,
+      outboundBinding: data.sourceTrafficDownBinding ?? data.trafficDownBinding ?? data.targetTrafficUpBinding,
     };
   }
   return {
@@ -72,8 +74,8 @@ function getSide(data: LinkEdgeData, which: 'source' | 'target', label: string):
     domBias: data.targetDomBias,
     domTx: data.targetDomTxPower,
     domRx: data.targetDomRxPower,
-    inboundBinding: data.targetTrafficUpBinding ?? data.trafficDownBinding,
-    outboundBinding: data.targetTrafficDownBinding ?? data.trafficUpBinding,
+    inboundBinding: data.targetTrafficUpBinding ?? data.trafficDownBinding ?? data.sourceTrafficDownBinding,
+    outboundBinding: data.targetTrafficDownBinding ?? data.trafficUpBinding ?? data.sourceTrafficUpBinding,
   };
 }
 
@@ -188,10 +190,17 @@ const FocusedView: React.FC<{ side: SideInfo; speed?: number }> = ({ side, speed
         <Metric label="Erros / Descartes" value={side.errors !== undefined ? String(side.errors) : '0'} color={side.errors && side.errors > 0 ? '#ef4444' : '#22c55e'} big />
       </div>
 
-      {/* IP (quando houver) */}
+      {/* Endereços IP (IPv4 em cima, IPv6 embaixo) */}
       {side.ip && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-          <Metric label="Endereço IP" value={side.ip} color="#cbd5e1" mono />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ background: '#0b1220', border: '1px solid #33415580', borderRadius: 8, padding: '10px 12px' }}>
+            <div style={{ fontSize: 10.5, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Endereços IP</div>
+            {splitIps(side.ip).map((addr, i) => (
+              <div key={i} style={{ marginTop: 4, color: '#cbd5e1', fontSize: i === 0 ? 15 : 13, fontWeight: 700, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                {addr}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

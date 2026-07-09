@@ -41,8 +41,8 @@ function sideStats(data: LinkEdgeData, focusSide: 'source' | 'target' | undefine
       device: targetLabel, other: sourceLabel, iface: data.targetInterface,
       inbound: data.targetTrafficUp ?? data.trafficDown,
       outbound: data.targetTrafficDown ?? data.trafficUp,
-      inBinding: data.targetTrafficUpBinding ?? data.trafficDownBinding,
-      outBinding: data.targetTrafficDownBinding ?? data.trafficUpBinding,
+      inBinding: data.targetTrafficUpBinding ?? data.trafficDownBinding ?? data.sourceTrafficDownBinding,
+      outBinding: data.targetTrafficDownBinding ?? data.trafficUpBinding ?? data.sourceTrafficUpBinding,
       pill: 'DESTINO', pillColor: '#10b981',
     };
   }
@@ -50,8 +50,9 @@ function sideStats(data: LinkEdgeData, focusSide: 'source' | 'target' | undefine
     device: sourceLabel, other: targetLabel, iface: data.sourceInterface,
     inbound: data.sourceTrafficUp ?? data.trafficUp,
     outbound: data.sourceTrafficDown ?? data.trafficDown,
-    inBinding: data.sourceTrafficUpBinding ?? data.trafficUpBinding,
-    outBinding: data.sourceTrafficDownBinding ?? data.trafficDownBinding,
+    // Fallback espelhado: num link p2p, o inbound de A é o outbound de B.
+    inBinding: data.sourceTrafficUpBinding ?? data.trafficUpBinding ?? data.targetTrafficDownBinding,
+    outBinding: data.sourceTrafficDownBinding ?? data.trafficDownBinding ?? data.targetTrafficUpBinding,
     pill: focusSide ? 'ORIGEM' : undefined, pillColor: '#3b82f6',
   };
 }
