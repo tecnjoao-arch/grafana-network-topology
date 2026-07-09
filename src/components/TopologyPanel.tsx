@@ -797,21 +797,35 @@ const TopologyInner: React.FC<InnerProps> = ({
 
   // O tooltip é acionado por hover NO CARD da interface (via hoverLink/unhoverLink),
   // não pela linha — assim mostra sempre o lado certo, sem brigar com o hover da aresta.
-  const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+  const onEdgeClick = useCallback((evt: React.MouseEvent, edge: Edge) => {
     setHover(null);
     if (options.editMode) {
       // No modo edição: clicar abre o editor de propriedades da linha
       setEditingEdgeId(edge.id);
     } else {
-      // Fora do modo edição: abre o modal de UMA interface. Prefere o lado que
-      // está de fato configurado (tem nome de interface) — senão abria um lado
-      // vazio (sem interface/IP) quando só o destino foi preenchido.
+      // Fora do modo edição: abre o modal de UMA interface.
+      // 1) Só um lado configurado → abre esse lado.
+      // 2) Dois lados → abre o MAIS PRÓXIMO do clique (a zona de clique da linha
+      //    tem 22px e passa rente aos cards; sem isso, mirar no card e acertar a
+      //    linha abria sempre o mesmo lado — parecia "travado" no anterior).
       const d = edge.data as LinkEdgeData;
-      const side: 'source' | 'target' =
+      let side: 'source' | 'target' =
         d?.sourceInterface ? 'source' : d?.targetInterface ? 'target' : 'source';
+      if (d?.sourceInterface && d?.targetInterface) {
+        const p = screenToFlowPosition({ x: evt.clientX, y: evt.clientY });
+        const sn = getNode(edge.source);
+        const tn = getNode(edge.target);
+        if (sn && tn) {
+          const dist = (n: Node) => Math.hypot(
+            (n.position.x + ((n.measured?.width ?? 0) / 2)) - p.x,
+            (n.position.y + ((n.measured?.height ?? 0) / 2)) - p.y
+          );
+          side = dist(sn) <= dist(tn) ? 'source' : 'target';
+        }
+      }
       setClicked({ edgeId: edge.id, side });
     }
-  }, [options.editMode]);
+  }, [options.editMode, screenToFlowPosition, getNode]);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     if (options.editMode) {
@@ -937,6 +951,7 @@ const TopologyInner: React.FC<InnerProps> = ({
       {/* Modal de detalhes (fora do modo edição) */}
       {clicked && clickedEdge && (
         <LinkDetailsModal
+          key={`${clicked.edgeId}:${clicked.side ?? 'source'}`}
           edgeId={clickedEdge.id}
           data={clickedEdge.data as LinkEdgeData}
           sourceLabel={findNodeLabel(clickedEdge.source)}

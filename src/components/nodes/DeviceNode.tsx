@@ -111,15 +111,15 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
           }}
           style={{
             position: 'absolute',
-            top: -10,
-            right: -10,
-            width: 26,
-            height: 26,
+            top: Math.round(-14 * fontScale),
+            right: Math.round(-14 * fontScale),
+            width: Math.round(38 * fontScale),
+            height: Math.round(38 * fontScale),
             borderRadius: '50%',
             background: '#0e7490',
-            border: '2px solid #0f172a',
+            border: '2px solid #67e8f9',
             color: '#fff',
-            fontSize: 13,
+            fontSize: Math.round(19 * fontScale),
             lineHeight: 1,
             cursor: 'pointer',
             zIndex: 30,
@@ -127,7 +127,7 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
             alignItems: 'center',
             justifyContent: 'center',
             padding: 0,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+            boxShadow: '0 3px 10px rgba(0,0,0,0.6)',
           }}
         >
           🌐

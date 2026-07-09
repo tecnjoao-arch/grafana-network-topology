@@ -612,7 +612,7 @@ const IfLabel: React.FC<{
       onPointerDown={draggable ? onDragDown : undefined}
       onPointerMove={draggable ? onDragMove : undefined}
       onPointerUp={draggable ? onDragUp : undefined}
-      onClick={!draggable && onOpenDetails ? onOpenDetails : undefined}
+      onClick={!draggable && onOpenDetails ? (e) => { e.stopPropagation(); onOpenDetails(); } : undefined}
       onMouseEnter={!draggable ? onHover : undefined}
       onMouseMove={!draggable ? onHover : undefined}
       onMouseLeave={!draggable ? onHoverEnd : undefined}
