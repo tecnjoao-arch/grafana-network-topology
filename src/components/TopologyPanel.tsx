@@ -314,11 +314,13 @@ export const TopologyPanel: React.FC<Props> = (props) => {
 
       // Tráfego por lado (A=origem, B=destino). O lado B espelha o A: o "upload"
       // de B corresponde ao "download" do link e vice-versa. Precedência em cada
-      // campo: binding do lado → binding global → estático do lado → estático global.
-      const sourceUp   = srcUp   ?? up   ?? e.data.sourceTrafficUp   ?? e.data.trafficUp;
-      const sourceDown = srcDown ?? down ?? e.data.sourceTrafficDown ?? e.data.trafficDown;
-      const targetUp   = tgtUp   ?? down ?? e.data.targetTrafficUp   ?? e.data.trafficDown ?? e.data.trafficUp;
-      const targetDown = tgtDown ?? up   ?? e.data.targetTrafficDown ?? e.data.trafficUp   ?? e.data.trafficDown;
+      // campo: binding do lado → binding global → ESPELHO ao vivo do outro lado
+      // (num link p2p, inbound de A = outbound de B) → estáticos. O espelho evita
+      // que um lado fique "—" quando só o outro tem bindings configurados.
+      const sourceUp   = srcUp   ?? up   ?? tgtDown ?? e.data.sourceTrafficUp   ?? e.data.trafficUp;
+      const sourceDown = srcDown ?? down ?? tgtUp   ?? e.data.sourceTrafficDown ?? e.data.trafficDown;
+      const targetUp   = tgtUp   ?? down ?? srcDown ?? e.data.targetTrafficUp   ?? e.data.trafficDown ?? e.data.trafficUp;
+      const targetDown = tgtDown ?? up   ?? srcUp   ?? e.data.targetTrafficDown ?? e.data.trafficUp   ?? e.data.trafficDown;
 
       // Congestionamento: link "up" passando de 90% de utilização vira laranja,
       // mesmo com threshold verde (saturação é mais crítica que o status up).
@@ -801,9 +803,13 @@ const TopologyInner: React.FC<InnerProps> = ({
       // No modo edição: clicar abre o editor de propriedades da linha
       setEditingEdgeId(edge.id);
     } else {
-      // Fora do modo edição: abre o modal da interface de ORIGEM (um lado só).
-      // O modal nunca mostra os dois lados — cada interface tem o seu.
-      setClicked({ edgeId: edge.id, side: 'source' });
+      // Fora do modo edição: abre o modal de UMA interface. Prefere o lado que
+      // está de fato configurado (tem nome de interface) — senão abria um lado
+      // vazio (sem interface/IP) quando só o destino foi preenchido.
+      const d = edge.data as LinkEdgeData;
+      const side: 'source' | 'target' =
+        d?.sourceInterface ? 'source' : d?.targetInterface ? 'target' : 'source';
+      setClicked({ edgeId: edge.id, side });
     }
   }, [options.editMode]);
 
@@ -844,7 +850,7 @@ const TopologyInner: React.FC<InnerProps> = ({
   const editingEdge = editingEdgeId ? findEdge(editingEdgeId) : null;
 
   return (
-    <EditorProvider value={{ editMode: !!options.editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, deleteEdge, setNodeData: setNodeDataPatch, deleteNode, duplicateNode, openLinkDetails, hoverLink, unhoverLink }}>
+    <EditorProvider value={{ editMode: !!options.editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, deleteEdge, setNodeData: setNodeDataPatch, deleteNode, duplicateNode, openLinkDetails, hoverLink, unhoverLink, openTest: onOpenTest }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

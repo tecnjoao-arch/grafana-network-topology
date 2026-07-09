@@ -27,6 +27,8 @@ interface EditorCtx {
   /** Hover num card de interface → tooltip daquele lado específico. */
   hoverLink?: (edgeId: string, side: 'source' | 'target', x: number, y: number) => void;
   unhoverLink?: () => void;
+  /** Abre o modal de testes de rede (Globalping) com um alvo inicial. */
+  openTest?: (target: string) => void;
 }
 
 const Ctx = createContext<EditorCtx>({
@@ -41,6 +43,7 @@ const Ctx = createContext<EditorCtx>({
   openLinkDetails: () => {},
   hoverLink: () => {},
   unhoverLink: () => {},
+  openTest: () => {},
 });
 
 export const EditorProvider: React.FC<{ value: EditorCtx; children: React.ReactNode }> = ({ value, children }) => (

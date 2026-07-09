@@ -16,7 +16,10 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
   // Escala da fonte do painel (opção "Escala da fonte" p/ TV de NOC):
   // textos escalam via em; ícone e badge usam px e precisam multiplicar.
   const fontScale = (data as any).fontScale ?? 1;
-  const { editMode, setNodeData } = useEditor();
+  const { editMode, setNodeData, openTest } = useEditor();
+
+  // Hover no nó (modo visualização) → mostra o botão 🌐 de testes de rede
+  const [hovered, setHovered] = React.useState(false);
 
   // Tamanho "ao vivo" durante o resize: atualiza só o estado local (visual).
   // A persistência nas options acontece apenas no fim (handleResizeEnd), evitando
@@ -75,6 +78,8 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
   return (
     <div
       onClick={handleNodeClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         opacity: nodeOpacity,
         display: 'flex',
@@ -96,13 +101,46 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
         cursor: (!editMode && linkUrl) ? 'pointer' : undefined,
       }}
     >
+      {/* Botão de testes de rede: aparece no hover (modo visualização).
+          Convive com o clique esquerdo (linkUrl) e o botão direito. */}
+      {!editMode && hovered && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation(); // não disparar o linkUrl do nó
+            openTest?.((ip as string) ?? '');
+          }}
+          style={{
+            position: 'absolute',
+            top: -10,
+            right: -10,
+            width: 26,
+            height: 26,
+            borderRadius: '50%',
+            background: '#0e7490',
+            border: '2px solid #0f172a',
+            color: '#fff',
+            fontSize: 13,
+            lineHeight: 1,
+            cursor: 'pointer',
+            zIndex: 30,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+          }}
+        >
+          🌐
+        </button>
+      )}
+
       {editMode && (
         <>
-          <NodeResizer 
-            color="#3b82f6" 
-            isVisible={selected} 
-            minWidth={50} 
-            minHeight={50} 
+          <NodeResizer
+            color="#3b82f6"
+            isVisible={selected}
+            minWidth={50}
+            minHeight={50}
             onResize={handleResize}
             onResizeEnd={handleResizeEnd}
             handleStyle={{ width: 10, height: 10, borderRadius: 2 }}

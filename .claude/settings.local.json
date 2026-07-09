@@ -46,7 +46,8 @@
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: testes de rede via Globalping \\(modal dedicado\\) *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'feat: botao direito no equipamento abre os testes de rede *)",
       "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'docs: INSTALL.md - guia de instalacao em outro Grafana *)",
-      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: entrada unica de testes, IPv4/IPv6 empilhados, grafico com fallback espelhado *)"
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: entrada unica de testes, IPv4/IPv6 empilhados, grafico com fallback espelhado *)",
+      "Bash(git -c user.name=dev -c user.email=dev@local commit -q -m 'fix: modal abre o lado configurado + espelho de valores ao vivo + botao de teste no hover do no *)"
     ]
   }
 }
