@@ -11,6 +11,19 @@ interface Props extends NodeProps {
   data: DeviceNodeData;
 }
 
+/** Só abre links http/https (ou relativos ao próprio Grafana). Bloqueia
+ *  javascript:, data:, file:… — evita que um linkUrl malicioso vire XSS. */
+function isSafeUrl(url: string): boolean {
+  const u = url.trim();
+  if (u.startsWith('/') || u.startsWith('#')) return true; // relativo ao Grafana
+  try {
+    const proto = new URL(u, window.location.origin).protocol;
+    return proto === 'http:' || proto === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
   const { label, ip, deviceType, status, customIcon, color, iconSize, searchQuery, nodeWidth, nodeHeight, borderRadius, bgColor, linkUrl } = data as any;
   // Escala da fonte do painel (opção "Escala da fonte" p/ TV de NOC):
@@ -45,8 +58,9 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
   const effHeight = liveSize.h ?? nodeHeight;
 
   const handleNodeClick = (e: React.MouseEvent) => {
-    if (!editMode && linkUrl) {
+    if (!editMode && linkUrl && isSafeUrl(linkUrl)) {
       e.stopPropagation();
+      // noopener,noreferrer: a página aberta não recebe window.opener nem o Referer
       window.open(linkUrl, '_blank', 'noopener,noreferrer');
     }
   };
