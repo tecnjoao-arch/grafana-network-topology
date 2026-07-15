@@ -80,6 +80,15 @@ export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
           'Crie grátis em dash.globalping.io. Atenção: fica visível no JSON do dashboard.',
         defaultValue: DEFAULT_OPTIONS.globalpingToken,
         category: ['Dados'],
+      })
+      .addTextInput({
+        path: 'globalpingInternalTag',
+        name: 'Tag da probe interna (opcional)',
+        description:
+          'Tag da sua probe self-hosted adotada no dash.globalping.io (ex: u-usuario-noc). ' +
+          'Cria o preset "Interna" no modal de testes — testes partindo de dentro da sua rede.',
+        defaultValue: DEFAULT_OPTIONS.globalpingInternalTag,
+        category: ['Dados'],
       });
     return builder;
   });

@@ -424,6 +424,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
           <NetworkTestModal
             initialTarget={testTarget}
             token={options.globalpingToken}
+            internalTag={options.globalpingInternalTag}
             onClose={() => setTestTarget(null)}
           />
         )}
