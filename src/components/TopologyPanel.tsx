@@ -264,27 +264,32 @@ export const TopologyPanel: React.FC<Props> = (props) => {
       const srcIp = resolveTextBinding(series, e.data.sourceIpBinding);
       const tgtIp = resolveTextBinding(series, e.data.targetIpBinding);
       
-      const srcErr = resolveBinding(series, e.data.sourceErrorBinding);
-      const tgtErr = resolveBinding(series, e.data.targetErrorBinding);
+      // Erros/descartes são diagnóstico (coleta lenta no Zabbix, 1–5 min):
+      // não passam pela checagem de obsolescência — senão piscam (aparecem
+      // logo após a coleta e "vencem" antes da próxima).
+      const srcErr = resolveBinding(series, e.data.sourceErrorBinding, { ignoreStale: true });
+      const tgtErr = resolveBinding(series, e.data.targetErrorBinding, { ignoreStale: true });
 
       // Bindings específicos por interface (lado A / lado B)
       const srcUp = resolveBinding(series, e.data.sourceTrafficUpBinding);
       const srcDown = resolveBinding(series, e.data.sourceTrafficDownBinding);
       const tgtUp = resolveBinding(series, e.data.targetTrafficUpBinding);
       const tgtDown = resolveBinding(series, e.data.targetTrafficDownBinding);
-      
-      // Bindings específicos de Fibra (DOM)
-      const srcDomTemp = resolveBinding(series, e.data.sourceDomTempBinding);
-      const srcDomVolt = resolveBinding(series, e.data.sourceDomVoltBinding);
-      const srcDomBias = resolveBinding(series, e.data.sourceDomBiasBinding);
-      const srcDomTx = resolveBinding(series, e.data.sourceDomTxPowerBinding);
-      const srcDomRx = resolveBinding(series, e.data.sourceDomRxPowerBinding);
 
-      const tgtDomTemp = resolveBinding(series, e.data.targetDomTempBinding);
-      const tgtDomVolt = resolveBinding(series, e.data.targetDomVoltBinding);
-      const tgtDomBias = resolveBinding(series, e.data.targetDomBiasBinding);
-      const tgtDomTx = resolveBinding(series, e.data.targetDomTxPowerBinding);
-      const tgtDomRx = resolveBinding(series, e.data.targetDomRxPowerBinding);
+      // Fibra (DOM): idem — temperatura/voltagem/bias costumam ser coletadas a
+      // cada 5 min; o filtro de stale (180s) as matava no meio do ciclo.
+      const DIAG = { ignoreStale: true } as const;
+      const srcDomTemp = resolveBinding(series, e.data.sourceDomTempBinding, DIAG);
+      const srcDomVolt = resolveBinding(series, e.data.sourceDomVoltBinding, DIAG);
+      const srcDomBias = resolveBinding(series, e.data.sourceDomBiasBinding, DIAG);
+      const srcDomTx = resolveBinding(series, e.data.sourceDomTxPowerBinding, DIAG);
+      const srcDomRx = resolveBinding(series, e.data.sourceDomRxPowerBinding, DIAG);
+
+      const tgtDomTemp = resolveBinding(series, e.data.targetDomTempBinding, DIAG);
+      const tgtDomVolt = resolveBinding(series, e.data.targetDomVoltBinding, DIAG);
+      const tgtDomBias = resolveBinding(series, e.data.targetDomBiasBinding, DIAG);
+      const tgtDomTx = resolveBinding(series, e.data.targetDomTxPowerBinding, DIAG);
+      const tgtDomRx = resolveBinding(series, e.data.targetDomRxPowerBinding, DIAG);
       
       const hasBinding = !!(e.data.trafficUpBinding || e.data.trafficDownBinding || e.data.sourceTrafficUpBinding || e.data.targetTrafficUpBinding);
       const resolved = up !== undefined || down !== undefined || srcUp !== undefined || tgtUp !== undefined;

@@ -176,10 +176,20 @@ export function resolveBinding(series: DataFrame[], binding?: MetricBinding, opt
       }
       if (lastIdx !== -1) {
         const tVal = Number(timeVals[lastIdx]);
-        // Tolerância respeita o intervalo de coleta DESTA série: uma métrica de
-        // 5 min não pode parecer obsoleta só porque outra série atualiza a cada 30s.
-        const tFirst = Number(timeVals[0]);
-        const interval = (lastIdx > 0 && !isNaN(tFirst) && !isNaN(tVal)) ? (tVal - tFirst) / lastIdx : 0;
+        // Tolerância respeita o intervalo REAL de coleta desta série: média dos
+        // gaps entre as últimas amostras VÁLIDAS. Posições de array não servem —
+        // o datasource preenche buracos com NaN, o que subestimava o intervalo
+        // de itens lentos (ex: DOM a cada 5 min) e os matava como obsoletos.
+        const sampleTimes: number[] = [];
+        for (let i = lastIdx; i >= 0 && sampleTimes.length < 6; i--) {
+          if (typeof vals[i] === 'number' && !isNaN(vals[i])) {
+            const t = Number(timeVals[i]);
+            if (!isNaN(t)) sampleTimes.push(t);
+          }
+        }
+        const interval = sampleTimes.length >= 2
+          ? (sampleTimes[0] - sampleTimes[sampleTimes.length - 1]) / (sampleTimes.length - 1)
+          : 0;
         const tolerance = Math.max(defaultStaleMs, interval * 2.5);
         if (!isNaN(tVal) && (idx.maxTime - tVal > tolerance)) {
           break; // Obsoleto: não resolve valor (força queda no status)
