@@ -5,7 +5,7 @@ import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { LinkEdgeData, LineStyle, LineAnimation, LINE_STYLES, LINE_ANIMATIONS, PathType, PATH_TYPES, LabelFooter, LABEL_FOOTERS } from '../types';
 import { MetricBinding, Aggregation } from '../utils/dataBinding';
-import { discoverInterfaces, DiscoveredInterface } from '../utils/discovery';
+import { discoverInterfaces, discoveryReport, DiscoveredInterface } from '../utils/discovery';
 import { SeriesCombo } from './SeriesCombo';
 
 interface Props {
@@ -527,6 +527,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
               <AutoFillPicker label={`Lado A → ${sourceLabel}`} interfaces={interfaces} onPick={(i) => autoFill(i, 'source')} />
               <div style={{ height: 6 }} />
               <AutoFillPicker label={`Lado B → ${targetLabel}`} interfaces={interfaces} onPick={(i) => autoFill(i, 'target')} />
+              <DiscoveryDiag seriesKeys={seriesKeys} />
             </div>
 
             <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
@@ -742,6 +743,42 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
       </div>
     </div>,
     document.body
+  );
+};
+
+/** Diagnóstico da detecção: contagens + amostras não reconhecidas. Quando um
+ *  template novo de Zabbix aparecer, é aqui que o padrão faltante se revela. */
+const DiscoveryDiag: React.FC<{ seriesKeys: string[] }> = ({ seriesKeys }) => {
+  const [open, setOpen] = useState(false);
+  const report = useMemo(() => discoveryReport(seriesKeys), [seriesKeys]);
+  return (
+    <div style={{ marginTop: 8 }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer',
+          fontSize: 10, padding: 0, textDecoration: 'underline dotted',
+        }}
+      >
+        🔍 diagnóstico: {report.classified}/{report.totalSeries} séries reconhecidas
+        · {report.hosts} hosts · {report.interfaces} interfaces
+      </button>
+      {open && report.unmatched.length > 0 && (
+        <div style={{ marginTop: 6, maxHeight: 110, overflowY: 'auto', background: '#0b1220', border: '1px solid #334155', borderRadius: 4, padding: 6 }}>
+          <div style={{ fontSize: 9.5, color: '#f59e0b', marginBottom: 4 }}>
+            Não reconhecidas (amostra) — me mostre estas se faltar algo no auto-preenchimento:
+          </div>
+          {report.unmatched.map((k, i) => (
+            <div key={i} style={{ fontSize: 9.5, fontFamily: 'monospace', color: '#64748b', padding: '1px 0', wordBreak: 'break-all' }}>
+              {k}
+            </div>
+          ))}
+        </div>
+      )}
+      {open && report.unmatched.length === 0 && (
+        <div style={{ marginTop: 4, fontSize: 9.5, color: '#22c55e' }}>✓ todas as séries relevantes foram reconhecidas</div>
+      )}
+    </div>
   );
 };
 
