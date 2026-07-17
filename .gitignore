@@ -4,3 +4,6 @@ dist/
 
 # Config local do Claude Code (nao versionar)
 .claude/
+
+# Pacotes gerados
+dist-zip/

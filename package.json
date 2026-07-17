@@ -5,14 +5,17 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && webpack --mode production",
-    "dev": "webpack --mode development --watch"
+    "dev": "webpack --mode development --watch",
+    "package": "npm run build && node scripts/package.js"
   },
   "devDependencies": {
     "@grafana/data": "^10.0.0",
     "@grafana/runtime": "^10.0.0",
     "@grafana/ui": "^10.0.0",
+    "@types/adm-zip": "^0.5.8",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "adm-zip": "^0.6.0",
     "copy-webpack-plugin": "^11.0.0",
     "css-loader": "^6.8.1",
     "react": "^18.2.0",
