@@ -10,8 +10,6 @@ import { createMeasurement, getMeasurement, GpMeasurement, GpRateInfo, GpResultI
 interface Props {
   initialTarget?: string;
   token?: string;
-  /** Tag da probe interna adotada (opções do painel) → preset "Interna" */
-  internalTag?: string;
   onClose: () => void;
 }
 
@@ -31,15 +29,10 @@ const ORIGINS: Array<{ label: string; magic: string }> = [
   { label: 'Mundo', magic: 'world' },
 ];
 
-export const NetworkTestModal: React.FC<Props> = ({ initialTarget = '', token, internalTag, onClose }) => {
+export const NetworkTestModal: React.FC<Props> = ({ initialTarget = '', token, onClose }) => {
   const [type, setType] = useState<GpType>('ping');
   const [target, setTarget] = useState(initialTarget);
   const [magic, setMagic] = useState('brazil');
-
-  // Preset "Interna" quando a tag da probe adotada está configurada no painel
-  const origins = internalTag && internalTag.trim()
-    ? [{ label: '🏠 Interna', magic: internalTag.trim() }, ...ORIGINS]
-    : ORIGINS;
   const [limit, setLimit] = useState(3);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,7 +152,7 @@ export const NetworkTestModal: React.FC<Props> = ({ initialTarget = '', token, i
           {/* Origem das probes + quantidade */}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
             <span style={{ fontSize: 11, color: '#64748b' }}>Origem:</span>
-            {origins.map((o) => (
+            {ORIGINS.map((o) => (
               <button
                 key={o.magic}
                 onClick={() => setMagic(o.magic)}

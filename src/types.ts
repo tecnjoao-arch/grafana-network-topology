@@ -254,9 +254,6 @@ export interface PanelOptions {
   /** Token do Globalping (opcional): aumenta a cota dos testes de rede.
    *  Atenção: fica visível no JSON do dashboard (risco baixo — só controla cota). */
   globalpingToken?: string;
-  /** Tag da probe interna adotada no Globalping (ex: "u-usuario-noc").
-   *  Quando preenchida, o modal de testes ganha o preset "Interna". */
-  globalpingInternalTag?: string;
 }
 
 export const DEFAULT_OPTIONS: PanelOptions = {
@@ -275,7 +272,6 @@ export const DEFAULT_OPTIONS: PanelOptions = {
   showLegend: true,
   staleThresholdSec: 180,
   globalpingToken: '',
-  globalpingInternalTag: '',
 };
 
 
