@@ -8,6 +8,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { EdgeProps, EdgeLabelRenderer, useInternalNode, useReactFlow, getBezierPath, getSmoothStepPath, Position } from '@xyflow/react';
 import { LinkEdgeData, LabelFooter } from '../../types';
 import { formatBitsPerSec, linkUtilization, splitIps } from '../../utils/format';
+import { evalOptical, rxThresholds, txThresholds, OpticalLevel } from '../../utils/optics';
 import { getEdgeParams } from '../../utils/floatingEdge';
 import { useEditor } from '../EditorContext';
 
@@ -372,6 +373,12 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
   const edgeOpacity = fade ? 0.15 : dimmed ? 0.35 : 1;
   const isGlowingSearch = hasSearch && matchesSearch;
 
+  // Potência óptica avaliada contra os limiares reais da interface (Zabbix)
+  const srcTxLevel = evalOptical(data?.sourceDomTxPower, txThresholds(data?.sourceOpticThresholds));
+  const srcRxLevel = evalOptical(data?.sourceDomRxPower, rxThresholds(data?.sourceOpticThresholds));
+  const tgtTxLevel = evalOptical(data?.targetDomTxPower, txThresholds(data?.targetOpticThresholds));
+  const tgtRxLevel = evalOptical(data?.targetDomRxPower, rxThresholds(data?.targetOpticThresholds));
+
   return (
     <g style={{ opacity: edgeOpacity, transition: 'opacity 0.2s ease-in-out' }}>
       {/* Halo: status down, selecionado, ou animação glow */}
@@ -519,6 +526,8 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             onHover={!editMode && hoverLink ? (e) => hoverLink(id, 'source', e.clientX, e.clientY) : undefined}
             onHoverEnd={!editMode && unhoverLink ? unhoverLink : undefined}
             dim={dimmed}
+            txLevel={srcTxLevel}
+            rxLevel={srcRxLevel}
           />
         )}
         {data?.targetInterface && (
@@ -544,6 +553,8 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             onHover={!editMode && hoverLink ? (e) => hoverLink(id, 'target', e.clientX, e.clientY) : undefined}
             onHoverEnd={!editMode && unhoverLink ? unhoverLink : undefined}
             dim={dimmed}
+            txLevel={tgtTxLevel}
+            rxLevel={tgtRxLevel}
           />
         )}
       </EdgeLabelRenderer>
@@ -601,7 +612,10 @@ const IfLabel: React.FC<{
   onHoverEnd?: () => void;
   /** Apagado (nó adjacente down): card esmaecido junto com a linha */
   dim?: boolean;
-}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, draggable, onDragDown, onDragMove, onDragUp, onOpenDetails, onHover, onHoverEnd, dim }) => {
+  /** Avaliação da potência contra os limiares reais (colore e marca ⚠) */
+  txLevel?: OpticalLevel;
+  rxLevel?: OpticalLevel;
+}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, draggable, onDragDown, onDragMove, onDragUp, onOpenDetails, onHover, onHoverEnd, dim, txLevel, rxLevel }) => {
   // Copiar por endereço (IPv4 e IPv6 são linhas separadas no card)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const copyAddr = (addr: string, idx: number) => (e: React.MouseEvent) => {
@@ -686,12 +700,15 @@ const IfLabel: React.FC<{
             </div>
           )}
           {(footer === 'fiber' || footer === 'both') && (domTx !== undefined || domRx !== undefined) && (
+            // Cores de identidade (Tx verde/Rx azul) preservadas; warn/alarm sobrescrevem
             <div style={{ borderTop: '1px dashed rgba(255,255,255,0.05)', marginTop: 2, paddingTop: 2, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.94em' }}>
-              <div style={{ color: '#4ade80', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
-                <span>Tx</span> <span>{domTx !== undefined ? `${domTx.toFixed(2)} dBm` : '—'}</span>
+              <div style={{ color: txLevel === 'alarm' ? '#ef4444' : txLevel === 'warn' ? '#facc15' : '#4ade80', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+                <span>Tx{txLevel === 'warn' || txLevel === 'alarm' ? ' ⚠' : ''}</span>
+                <span>{domTx !== undefined ? `${domTx.toFixed(2)} dBm` : '—'}</span>
               </div>
-              <div style={{ color: '#60a5fa', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
-                <span>Rx</span> <span>{domRx !== undefined ? `${domRx.toFixed(2)} dBm` : '—'}</span>
+              <div style={{ color: rxLevel === 'alarm' ? '#ef4444' : rxLevel === 'warn' ? '#facc15' : '#60a5fa', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+                <span>Rx{rxLevel === 'warn' || rxLevel === 'alarm' ? ' ⚠' : ''}</span>
+                <span>{domRx !== undefined ? `${domRx.toFixed(2)} dBm` : '—'}</span>
               </div>
             </div>
           )}

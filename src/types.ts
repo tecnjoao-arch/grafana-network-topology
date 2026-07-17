@@ -59,6 +59,28 @@ export const PATH_TYPES: PathType[] = ['straight', 'curved', 'step'];
 export type LabelFooter = 'speed' | 'fiber' | 'both' | 'none';
 export const LABEL_FOOTERS: LabelFooter[] = ['speed', 'fiber', 'both', 'none'];
 
+/** Chaves dos limiares ópticos de potência (Alarm/Warning × High/Low),
+ *  espelhando os itens do Zabbix ("Rx Threshold Alarm High" etc). */
+export const OPTIC_KEYS = [
+  'rxAlarmHigh', 'rxAlarmLow', 'rxWarnHigh', 'rxWarnLow',
+  'txAlarmHigh', 'txAlarmLow', 'txWarnHigh', 'txWarnLow',
+] as const;
+export type OpticKey = (typeof OPTIC_KEYS)[number];
+
+/** Bindings de info do módulo óptico (itens de texto do Zabbix) */
+export interface ModuleInfoBindings {
+  model?: MetricBinding;
+  serial?: MetricBinding;
+  mediaType?: MetricBinding;
+}
+
+/** Info do módulo óptico resolvida (ex: "QSFP-100G-DR-S", "INL26240JV8", "Fiber") */
+export interface ModuleInfo {
+  model?: string;
+  serial?: string;
+  mediaType?: string;
+}
+
 /** Um equipamento no diagrama (nó) */
 export interface DeviceNodeData {
   label: string;
@@ -200,6 +222,19 @@ export interface LinkEdgeData {
   targetDomBiasBinding?: MetricBinding;
   targetDomTxPowerBinding?: MetricBinding;
   targetDomRxPowerBinding?: MetricBinding;
+
+  /** Limiares ópticos por lado (auto-preenchidos pela detecção; ignoram staleness) */
+  sourceOpticThresholdBindings?: Partial<Record<OpticKey, MetricBinding>>;
+  targetOpticThresholdBindings?: Partial<Record<OpticKey, MetricBinding>>;
+  /** Limiares resolvidos (uso interno) */
+  sourceOpticThresholds?: Partial<Record<OpticKey, number>>;
+  targetOpticThresholds?: Partial<Record<OpticKey, number>>;
+  /** Info do módulo óptico por lado (texto; auto-preenchida) */
+  sourceModuleInfoBindings?: ModuleInfoBindings;
+  targetModuleInfoBindings?: ModuleInfoBindings;
+  /** Info do módulo resolvida (uso interno) */
+  sourceModuleInfo?: ModuleInfo;
+  targetModuleInfo?: ModuleInfo;
 
   targetDomTemp?: number;
   targetDomVolt?: number;

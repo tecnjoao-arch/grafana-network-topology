@@ -6,9 +6,10 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { DataFrame } from '@grafana/data';
-import { LinkEdgeData, MetricBinding } from '../types';
+import { LinkEdgeData, MetricBinding, ModuleInfo, OpticKey } from '../types';
 import { formatBitsPerSec, linkUtilization, niceCeil, niceStep, fmtAxisBps, splitIps } from '../utils/format';
 import { resolveBindingSeries, BindingSeries } from '../utils/dataBinding';
+import { evalOptical, rxThresholds, txThresholds, formatRange, OpticalLevel } from '../utils/optics';
 
 interface Props {
   edgeId: string;
@@ -38,6 +39,8 @@ interface SideInfo {
   domBias?: number;
   domTx?: number;
   domRx?: number;
+  optics?: Partial<Record<OpticKey, number>>;
+  module?: ModuleInfo;
   inboundBinding?: MetricBinding;
   outboundBinding?: MetricBinding;
 }
@@ -56,6 +59,8 @@ function getSide(data: LinkEdgeData, which: 'source' | 'target', label: string):
       domBias: data.sourceDomBias,
       domTx: data.sourceDomTxPower,
       domRx: data.sourceDomRxPower,
+      optics: data.sourceOpticThresholds,
+      module: data.sourceModuleInfo,
       // Fallback espelhado: num link p2p, o inbound de A é o outbound de B.
       // Permite gráfico mesmo quando só um dos lados tem binding configurado.
       inboundBinding: data.sourceTrafficUpBinding ?? data.trafficUpBinding ?? data.targetTrafficDownBinding,
@@ -74,6 +79,8 @@ function getSide(data: LinkEdgeData, which: 'source' | 'target', label: string):
     domBias: data.targetDomBias,
     domTx: data.targetDomTxPower,
     domRx: data.targetDomRxPower,
+    optics: data.targetOpticThresholds,
+    module: data.targetModuleInfo,
     inboundBinding: data.targetTrafficUpBinding ?? data.trafficDownBinding ?? data.sourceTrafficDownBinding,
     outboundBinding: data.targetTrafficDownBinding ?? data.trafficUpBinding ?? data.sourceTrafficUpBinding,
   };
@@ -204,22 +211,52 @@ const FocusedView: React.FC<{ side: SideInfo; speed?: number }> = ({ side, speed
         </div>
       )}
 
-      {/* DOM Fibra (se houver) */}
-      {hasDom(side) && (
+      {/* DOM Fibra + módulo (se houver) */}
+      {(hasDom(side) || side.module) && (
         <div style={{ background: '#0b1220', border: '1px solid #1e293b', borderRadius: 8, padding: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#a855f7', marginBottom: 10 }}>🧬 Diagnóstico Óptico (DOM)</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-            <Field label="Tx Power" value={side.domTx !== undefined ? `${side.domTx.toFixed(2)} dBm` : '—'} color="#4ade80" mono />
-            <Field label="Rx Power" value={side.domRx !== undefined ? `${side.domRx.toFixed(2)} dBm` : '—'} color="#60a5fa" mono />
-            <Field label="Temperatura" value={side.domTemp !== undefined ? `${side.domTemp.toFixed(1)} °C` : '—'} mono />
-            <Field label="Voltagem" value={side.domVolt !== undefined ? `${side.domVolt.toFixed(2)} V` : '—'} mono />
-            <Field label="Bias (laser)" value={side.domBias !== undefined ? `${side.domBias.toFixed(2)} mA` : '—'} mono />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#a855f7' }}>🧬 Diagnóstico Óptico (DOM)</span>
+            {side.module && (
+              <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace' }}>
+                {[side.module.model, side.module.serial && `SN ${side.module.serial}`, side.module.mediaType]
+                  .filter(Boolean).join(' · ')}
+              </span>
+            )}
           </div>
+          {hasDom(side) && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              <OpticField label="Tx Power" value={side.domTx} level={evalOptical(side.domTx, txThresholds(side.optics))} range={formatRange(txThresholds(side.optics))} identity="#4ade80" />
+              <OpticField label="Rx Power" value={side.domRx} level={evalOptical(side.domRx, rxThresholds(side.optics))} range={formatRange(rxThresholds(side.optics))} identity="#60a5fa" />
+              <Field label="Temperatura" value={side.domTemp !== undefined ? `${side.domTemp.toFixed(1)} °C` : '—'} mono />
+              <Field label="Voltagem" value={side.domVolt !== undefined ? `${side.domVolt.toFixed(2)} V` : '—'} mono />
+              <Field label="Bias (laser)" value={side.domBias !== undefined ? `${side.domBias.toFixed(2)} mA` : '—'} mono />
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 };
+
+/** Potência óptica com avaliação pelo limiar real da interface: cor por nível
+ *  (alarm vermelho / warn amarelo / normal = cor de identidade) + faixa. */
+const OpticField: React.FC<{
+  label: string;
+  value?: number;
+  level?: OpticalLevel;
+  range?: string;
+  identity: string;
+}> = ({ label, value, level, range, identity }) => (
+  <div>
+    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      {label}{level === 'warn' || level === 'alarm' ? ' ⚠' : ''}
+    </div>
+    <div style={{ marginTop: 2, fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: level === 'alarm' ? '#ef4444' : level === 'warn' ? '#facc15' : identity }}>
+      {value !== undefined ? `${value.toFixed(2)} dBm` : '—'}
+    </div>
+    {range && <div style={{ fontSize: 9.5, color: '#475569', marginTop: 1 }}>faixa: {range}</div>}
+  </div>
+);
 
 /** Cartão de métrica reutilizável (estilo do print de referência). bar = 0..100 opcional. */
 const Metric: React.FC<{ label: string; value: string; color: string; big?: boolean; mono?: boolean; bar?: number }> = ({ label, value, color, big, mono, bar }) => (

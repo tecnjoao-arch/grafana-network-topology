@@ -3,7 +3,11 @@
 
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { LinkEdgeData, LineStyle, LineAnimation, LINE_STYLES, LINE_ANIMATIONS, PathType, PATH_TYPES, LabelFooter, LABEL_FOOTERS } from '../types';
+import {
+  LinkEdgeData, LineStyle, LineAnimation, LINE_STYLES, LINE_ANIMATIONS,
+  PathType, PATH_TYPES, LabelFooter, LABEL_FOOTERS,
+  OPTIC_KEYS, OpticKey, ModuleInfoBindings,
+} from '../types';
 import { MetricBinding, Aggregation } from '../utils/dataBinding';
 import { discoverInterfaces, discoveryReport, DiscoveredInterface } from '../utils/discovery';
 import { SeriesCombo } from './SeriesCombo';
@@ -58,9 +62,27 @@ const FOOTER_LABEL: Record<LabelFooter, string> = {
   none: 'Nenhum',
 };
 
+const OPTIC_LABEL: Record<OpticKey, string> = {
+  rxAlarmHigh: 'Rx Alarm High (dBm)',
+  rxAlarmLow: 'Rx Alarm Low (dBm)',
+  rxWarnHigh: 'Rx Warning High (dBm)',
+  rxWarnLow: 'Rx Warning Low (dBm)',
+  txAlarmHigh: 'Tx Alarm High (dBm)',
+  txAlarmLow: 'Tx Alarm Low (dBm)',
+  txWarnHigh: 'Tx Warning High (dBm)',
+  txWarnLow: 'Tx Warning Low (dBm)',
+};
+
+const MODULE_LABEL: Record<keyof ModuleInfoBindings, string> = {
+  model: 'Módulo (modelo)',
+  serial: 'Módulo (serial)',
+  mediaType: 'Media Type',
+};
+
 export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, seriesKeys, onChange, onDelete, onClose }) => {
   const color = data.color ?? '#22c55e';
   const [showSeries, setShowSeries] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   // Texto da capacidade fixa (só grava quando o usuário digita)
   const [speedText, setSpeedText] = useState('');
   // Thresholds ativos = cor/animação manuais viram só reserva (quando nenhuma regra casa)
@@ -97,9 +119,46 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
       if (m.domVolt) patch.targetDomVoltBinding = bind(m.domVolt);
       if (m.domBias) patch.targetDomBiasBinding = bind(m.domBias);
     }
+
+    // Limiares ópticos e info do módulo detectados pra interface escolhida
+    const thresholds: Partial<Record<OpticKey, MetricBinding>> = {};
+    for (const k of OPTIC_KEYS) {
+      const key = m[k];
+      if (key) thresholds[k] = { match: key, aggregation: 'last' };
+    }
+    const moduleInfo: ModuleInfoBindings = {};
+    if (m.moduleModel) moduleInfo.model = bind(m.moduleModel);
+    if (m.moduleSerial) moduleInfo.serial = bind(m.moduleSerial);
+    if (m.mediaType) moduleInfo.mediaType = bind(m.mediaType);
+    if (side === 'source') {
+      if (Object.keys(thresholds).length) patch.sourceOpticThresholdBindings = thresholds;
+      if (Object.keys(moduleInfo).length) patch.sourceModuleInfoBindings = moduleInfo;
+    } else {
+      if (Object.keys(thresholds).length) patch.targetOpticThresholdBindings = thresholds;
+      if (Object.keys(moduleInfo).length) patch.targetModuleInfoBindings = moduleInfo;
+    }
+
     if (m.speed) patch.speedBinding = bind(m.speed);
     if (m.status) patch.statusBinding = bind(m.status);
     onChange(patch);
+  };
+
+  // Limiar óptico: binding aninhado por lado/chave (auto-preenchido; ajuste fino aqui)
+  const patchOptic = (side: 'source' | 'target', key: OpticKey, p: Partial<MetricBinding>) => {
+    const field = side === 'source' ? 'sourceOpticThresholdBindings' : 'targetOpticThresholdBindings';
+    const all = { ...(data[field] ?? {}) } as Partial<Record<OpticKey, MetricBinding>>;
+    const next = { ...(all[key] ?? { match: '', aggregation: 'last' as const }), ...p };
+    if (next.match) all[key] = next; else delete all[key];
+    onChange({ [field]: Object.keys(all).length ? all : undefined } as Partial<LinkEdgeData>);
+  };
+
+  // Info do módulo (texto): mesmo esquema aninhado
+  const patchModule = (side: 'source' | 'target', key: keyof ModuleInfoBindings, p: Partial<MetricBinding>) => {
+    const field = side === 'source' ? 'sourceModuleInfoBindings' : 'targetModuleInfoBindings';
+    const all = { ...(data[field] ?? {}) } as ModuleInfoBindings;
+    const next = { ...(all[key] ?? { match: '', aggregation: 'last' as const }), ...p };
+    if (next.match) all[key] = next; else delete all[key];
+    onChange({ [field]: Object.keys(all).length ? all : undefined } as Partial<LinkEdgeData>);
   };
 
   const patchBinding = (
@@ -522,7 +581,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
                 ⚡ Auto-preenchimento ({interfaces.length} interfaces detectadas)
               </div>
               <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8 }}>
-                Escolha a interface de cada lado — preenche tráfego, erros, IP, DOM e capacidade de uma vez.
+                Escolha a interface de cada lado — preenche tráfego, erros, IP, DOM, limiares ópticos, módulo e capacidade de uma vez.
               </div>
               <AutoFillPicker label={`Lado A → ${sourceLabel}`} interfaces={interfaces} onPick={(i) => autoFill(i, 'source')} />
               <div style={{ height: 6 }} />
@@ -707,6 +766,42 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
               onMatch={(m) => patchBinding('targetDomRxPowerBinding', { match: m })}
               onAgg={(a) => patchBinding('targetDomRxPowerBinding', { aggregation: a })}
             />
+
+            {/* Limiares ópticos + módulo — o ⚡ Auto-preenchimento popula; aqui é o ajuste fino */}
+            <button onClick={() => setShowAdvanced((s) => !s)} style={{ ...btnReset, width: '100%', marginTop: 12 }}>
+              {showAdvanced ? '▾ ocultar' : '▸ mostrar'} limiares ópticos e módulo (avançado)
+            </button>
+            {showAdvanced && (['source', 'target'] as const).map((side) => {
+              const th = side === 'source' ? data.sourceOpticThresholdBindings : data.targetOpticThresholdBindings;
+              const mod = side === 'source' ? data.sourceModuleInfoBindings : data.targetModuleInfoBindings;
+              return (
+                <div key={side} style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 11, color: side === 'source' ? '#3b82f6' : '#10b981', fontWeight: 'bold', marginBottom: 4 }}>
+                    {side === 'source' ? `Lado A (${sourceLabel})` : `Lado B (${targetLabel})`}
+                  </div>
+                  {OPTIC_KEYS.map((k) => (
+                    <BindRow
+                      key={k}
+                      label={OPTIC_LABEL[k]}
+                      binding={th?.[k]}
+                      seriesKeys={seriesKeys}
+                      onMatch={(m2) => patchOptic(side, k, { match: m2 })}
+                      onAgg={(a) => patchOptic(side, k, { aggregation: a })}
+                    />
+                  ))}
+                  {(Object.keys(MODULE_LABEL) as Array<keyof ModuleInfoBindings>).map((k) => (
+                    <BindRow
+                      key={k}
+                      label={MODULE_LABEL[k]}
+                      binding={mod?.[k]}
+                      seriesKeys={seriesKeys}
+                      onMatch={(m2) => patchModule(side, k, { match: m2 })}
+                      onAgg={(a) => patchModule(side, k, { aggregation: a })}
+                    />
+                  ))}
+                </div>
+              );
+            })}
 
             <button onClick={() => setShowSeries((s) => !s)} style={{ ...btnReset, width: '100%', marginTop: 8 }}>
               {showSeries ? '▾ ocultar' : '▸ ver'} séries detectadas ({seriesKeys.length})

@@ -10,7 +10,11 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { PanelOptions, NetworkTopology, LinkEdgeData, DEFAULT_OPTIONS } from '../types';
+import {
+  PanelOptions, NetworkTopology, LinkEdgeData, DEFAULT_OPTIONS,
+  OPTIC_KEYS, OpticKey, MetricBinding, ModuleInfoBindings, ModuleInfo,
+} from '../types';
+import { DataFrame } from '@grafana/data';
 import { DeviceNode } from './nodes/DeviceNode';
 import { LinkEdge } from './edges/LinkEdge';
 import { LinkTooltip } from './LinkTooltip';
@@ -32,6 +36,38 @@ const genId = (prefix: string) => `${prefix}-${Date.now()}-${(__idSeq++).toStrin
 // dos objetos que não mudaram (assim o React Flow não re-renderiza tudo a cada
 // edição; só o nó/aresta que de fato mudou ganha objeto novo).
 const sameData = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+// Limiares/módulo são diagnóstico de coleta lenta no Zabbix → ignoram staleness.
+const DIAG_OPTS = { ignoreStale: true } as const;
+
+/** Resolve o conjunto de limiares ópticos de um lado. undefined se nada resolver. */
+function resolveOpticThresholds(
+  series: DataFrame[],
+  bindings?: Partial<Record<OpticKey, MetricBinding>>
+): Partial<Record<OpticKey, number>> | undefined {
+  if (!bindings) return undefined;
+  const out: Partial<Record<OpticKey, number>> = {};
+  let any = false;
+  for (const k of OPTIC_KEYS) {
+    const v = resolveBinding(series, bindings[k], DIAG_OPTS);
+    if (v !== undefined) {
+      out[k] = v;
+      any = true;
+    }
+  }
+  return any ? out : undefined;
+}
+
+/** Resolve a info do módulo óptico (texto) de um lado. */
+function resolveModuleInfo(series: DataFrame[], bindings?: ModuleInfoBindings): ModuleInfo | undefined {
+  if (!bindings) return undefined;
+  const info: ModuleInfo = {
+    model: resolveTextBinding(series, bindings.model),
+    serial: resolveTextBinding(series, bindings.serial),
+    mediaType: resolveTextBinding(series, bindings.mediaType),
+  };
+  return info.model || info.serial || info.mediaType ? info : undefined;
+}
 
 const Sidebar: React.FC<{
   showIp: boolean;
@@ -261,6 +297,12 @@ export const TopologyPanel: React.FC<Props> = (props) => {
       const tgtDomBias = resolveBinding(series, e.data.targetDomBiasBinding, DIAG);
       const tgtDomTx = resolveBinding(series, e.data.targetDomTxPowerBinding, DIAG);
       const tgtDomRx = resolveBinding(series, e.data.targetDomRxPowerBinding, DIAG);
+
+      // Limiares ópticos + info do módulo (auto-preenchidos pela detecção)
+      const srcOptics = resolveOpticThresholds(series, e.data.sourceOpticThresholdBindings);
+      const tgtOptics = resolveOpticThresholds(series, e.data.targetOpticThresholdBindings);
+      const srcModule = resolveModuleInfo(series, e.data.sourceModuleInfoBindings);
+      const tgtModule = resolveModuleInfo(series, e.data.targetModuleInfoBindings);
       
       const hasBinding = !!(e.data.trafficUpBinding || e.data.trafficDownBinding || e.data.sourceTrafficUpBinding || e.data.targetTrafficUpBinding);
       const resolved = up !== undefined || down !== undefined || srcUp !== undefined || tgtUp !== undefined;
@@ -351,6 +393,12 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         targetDomBias: tgtDomBias,
         targetDomTxPower: tgtDomTx,
         targetDomRxPower: tgtDomRx,
+
+        // Limiares ópticos + módulo (resolvidos)
+        sourceOpticThresholds: srcOptics,
+        targetOpticThresholds: tgtOptics,
+        sourceModuleInfo: srcModule,
+        targetModuleInfo: tgtModule,
 
         showIp: showIp,
         searchQuery: searchQuery,
