@@ -62,6 +62,15 @@ export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
         defaultValue: DEFAULT_OPTIONS.showMinimap,
         category: ['Visual'],
       })
+      .addBooleanSwitch({
+        path: 'dimLinksOnNodeDown',
+        name: 'Apagar links de nós down',
+        description:
+          'Quando um equipamento fica down (pelo binding de status/ping), os links ' +
+          'ligados a ele ficam apagados — a leitura vira "o problema é o nó".',
+        defaultValue: DEFAULT_OPTIONS.dimLinksOnNodeDown,
+        category: ['Visual'],
+      })
       .addNumberInput({
         path: 'staleThresholdSec',
         name: 'Limite de obsolescência (s)',

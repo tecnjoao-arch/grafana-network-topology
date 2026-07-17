@@ -366,9 +366,10 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
     (data?.targetIp?.toLowerCase().includes(q))
   );
   
-  // Se tem busca ativa, ofuscar o que não bate com a busca (opacity 0.15)
+  // Opacidade: busca sem match (0.15) > nó adjacente down/apagado (0.35) > normal
   const fade = hasSearch && !matchesSearch;
-  const edgeOpacity = fade ? 0.15 : 1;
+  const dimmed = !!data?.dimmed;
+  const edgeOpacity = fade ? 0.15 : dimmed ? 0.35 : 1;
   const isGlowingSearch = hasSearch && matchesSearch;
 
   return (
@@ -517,6 +518,7 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             onOpenDetails={!editMode && openLinkDetails ? () => openLinkDetails(id, 'source') : undefined}
             onHover={!editMode && hoverLink ? (e) => hoverLink(id, 'source', e.clientX, e.clientY) : undefined}
             onHoverEnd={!editMode && unhoverLink ? unhoverLink : undefined}
+            dim={dimmed}
           />
         )}
         {data?.targetInterface && (
@@ -541,6 +543,7 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             onOpenDetails={!editMode && openLinkDetails ? () => openLinkDetails(id, 'target') : undefined}
             onHover={!editMode && hoverLink ? (e) => hoverLink(id, 'target', e.clientX, e.clientY) : undefined}
             onHoverEnd={!editMode && unhoverLink ? unhoverLink : undefined}
+            dim={dimmed}
           />
         )}
       </EdgeLabelRenderer>
@@ -596,7 +599,9 @@ const IfLabel: React.FC<{
   /** Hover → tooltip deste lado específico */
   onHover?: (e: React.MouseEvent) => void;
   onHoverEnd?: () => void;
-}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, draggable, onDragDown, onDragMove, onDragUp, onOpenDetails, onHover, onHoverEnd }) => {
+  /** Apagado (nó adjacente down): card esmaecido junto com a linha */
+  dim?: boolean;
+}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, draggable, onDragDown, onDragMove, onDragUp, onOpenDetails, onHover, onHoverEnd, dim }) => {
   // Copiar por endereço (IPv4 e IPv6 são linhas separadas no card)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const copyAddr = (addr: string, idx: number) => (e: React.MouseEvent) => {
@@ -620,6 +625,7 @@ const IfLabel: React.FC<{
       style={{
         position: 'absolute',
         transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`,
+        opacity: dim ? 0.35 : 1,
         cursor: draggable ? 'grab' : (onOpenDetails ? 'pointer' : undefined),
         // em (não px): acompanha a opção "Escala da fonte" do painel (TV de NOC).
         // Setas (↓/↑) no lugar de "In/Out" liberam espaço → fonte um pouco maior.

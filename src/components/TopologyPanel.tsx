@@ -21,6 +21,7 @@ import { NodeEditor } from './NodeEditor';
 import { EditorProvider } from './EditorContext';
 import { LinkEdgeData as LinkData } from '../types';
 import { resolveBinding, resolveTextBinding, listSeriesKeys, setStaleThresholdMs } from '../utils/dataBinding';
+import { resolveNodeStatus, NodeLiveStatus } from '../utils/status';
 
 // Gera ids únicos e estáveis dentro do processo. Date.now() sozinho colide
 // quando o usuário duplica/cola vários nós no mesmo milissegundo.
@@ -200,48 +201,18 @@ export const TopologyPanel: React.FC<Props> = (props) => {
   // Modal de testes de rede (Globalping): null = fechado; string = alvo inicial
   const [testTarget, setTestTarget] = useState<string | null>(null);
 
-  // Função utilitária para avaliar regra de status
-  const evaluateStatus = (value: number | undefined, op?: string, target?: number) => {
-    if (value === undefined) return 'unknown';
-    const tgt = target ?? 0;
-    const operator = op ?? '>';
-    let isUp = false;
-    switch (operator) {
-      case '==': isUp = value === tgt; break;
-      case '!=': isUp = value !== tgt; break;
-      case '>': isUp = value > tgt; break;
-      case '>=': isUp = value >= tgt; break;
-      case '<': isUp = value < tgt; break;
-      case '<=': isUp = value <= tgt; break;
-      default: isUp = value > tgt;
-    }
-    return isUp ? 'up' : 'down';
-  };
+  // Status ao vivo de CADA nó, calculado uma única vez por refresh e
+  // compartilhado entre os memos de nós e de arestas (nó down → links apagados).
+  const nodeLive = useMemo(() => {
+    const m = new Map<string, NodeLiveStatus>();
+    for (const n of topology.nodes) m.set(n.id, resolveNodeStatus(n.data, series));
+    return m;
+  }, [topology, series]);
 
-  // Nós: aplica binding de status baseado na regra customizada
+  // Nós: injeta status/cor resolvidos + extras de render
   const initialNodes: Node[] = useMemo(
     () => topology.nodes.map((n) => {
-      const live = resolveBinding(series, n.data.statusBinding);
-      let status = n.data.status;
-      let color = n.data.color;
-
-      if (n.data.statusBinding && live !== undefined) {
-        if (n.data.colorMappings && n.data.colorMappings.length > 0) {
-          const liveStr = String(live).trim().toLowerCase();
-          const matched = n.data.colorMappings.find(
-            (m) => String(m.value).trim().toLowerCase() === liveStr
-          );
-          if (matched) {
-            color = matched.color;
-            status = 'up'; // Actives status dot/badge, DeviceNode colors it using the 'color' variable
-          } else {
-            status = 'unknown';
-          }
-        } else {
-          status = evaluateStatus(live, n.data.statusOperator, n.data.statusValue);
-        }
-      }
-
+      const { status, color } = nodeLive.get(n.id) ?? {};
       return {
         id: n.id,
         type: 'device',
@@ -250,7 +221,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         data: { ...n.data, status, color, searchQuery, fontScale: options.fontScale ?? 1 } as any,
       };
     }),
-    [topology, series, searchQuery, options.fontScale]
+    [topology, nodeLive, searchQuery, options.fontScale]
   );
 
   // Arestas: aplica binding de up/down/speed e IP das séries
@@ -338,6 +309,18 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         edgeStatus = 'warning';
       }
 
+      // PRECEDÊNCIA MÁXIMA — nó down apaga os links adjacentes: o status de
+      // aresta vem do ifOperStatus de UM lado só, então com o vizinho morto os
+      // links ficavam inconsistentes (uns vermelhos, outros cinzas). Apagados,
+      // a leitura de NOC vira "o problema é o equipamento, não os links".
+      const endpointDown = (options.dimLinksOnNodeDown ?? true) &&
+        (nodeLive.get(e.source)?.status === 'down' || nodeLive.get(e.target)?.status === 'down');
+      if (endpointDown) {
+        edgeStatus = 'unknown';
+        edgeAnim = 'none';
+        edgeColor = undefined; // cinza automático do status unknown
+      }
+
       const liveData: LinkEdgeData = {
         ...e.data,
         // Tráfego "global" do link (tooltip, modal, utilização→cor/espessura):
@@ -376,6 +359,8 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         animation: edgeAnim,
         lineStyle: edgeLineStyle,
         status: edgeStatus,
+        // Apagado (nó adjacente down): LinkEdge/cards renderizam com opacidade baixa
+        dimmed: endpointDown,
         // Escala da fonte injetada: o card (LinkEdge) usa pra afastar os labels
         // proporcionalmente, senão eles colidem ao aumentar a escala.
         fontScale: options.fontScale ?? 1,
@@ -388,7 +373,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         data: liveData as any,
       };
     }),
-    [topology, series, showIp, searchQuery, hideTrafficCards, options.fontScale]
+    [topology, series, showIp, searchQuery, hideTrafficCards, options.fontScale, nodeLive, options.dimLinksOnNodeDown]
   );
 
   return (

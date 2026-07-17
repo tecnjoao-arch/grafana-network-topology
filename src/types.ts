@@ -160,6 +160,8 @@ export interface LinkEdgeData {
   sourceIpBinding?: MetricBinding;
   /** Binding: IP associado à interface de destino (string) */
   targetIpBinding?: MetricBinding;
+  /** Apagado: um nó adjacente está down (uso interno; injetado via painel) */
+  dimmed?: boolean;
   /** Estado global: mostrar IP (injetado via painel) */
   showIp?: boolean;
   /** Valor resolvido do IP origem (uso interno) */
@@ -251,6 +253,8 @@ export interface PanelOptions {
   showLegend: boolean;
   /** Segundos sem atualização para considerar uma métrica obsoleta (status cai). 0 desativa. */
   staleThresholdSec: number;
+  /** Nó down apaga (esmaece) os links adjacentes */
+  dimLinksOnNodeDown: boolean;
   /** Token do Globalping (opcional): aumenta a cota dos testes de rede.
    *  Atenção: fica visível no JSON do dashboard (risco baixo — só controla cota). */
   globalpingToken?: string;
@@ -271,6 +275,7 @@ export const DEFAULT_OPTIONS: PanelOptions = {
   editMode: false,
   showLegend: true,
   staleThresholdSec: 180,
+  dimLinksOnNodeDown: true,
   globalpingToken: '',
 };
 
