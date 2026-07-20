@@ -18,7 +18,7 @@ Na página de **Releases** do repositório, copie o link do arquivo
 
 ```bash
 cd /tmp
-wget https://github.com/SEU_USUARIO/grafana-network-topology/releases/download/vX.Y.Z/grafana-network-topology-X.Y.Z.zip
+wget https://github.com/tecnjoao-arch/grafana-network-topology/releases/download/vX.Y.Z/grafana-network-topology-X.Y.Z.zip
 # (sem wget? use: curl -L -O <link do zip>)
 
 # O zip já traz a pasta grafana-network-topology/ dentro:
@@ -153,7 +153,7 @@ Para quem quer buildar em vez de usar a release (requer Node.js 18+ na máquina
 de build — o servidor não precisa):
 
 ```bash
-git clone https://github.com/SEU_USUARIO/grafana-network-topology.git
+git clone https://github.com/tecnjoao-arch/grafana-network-topology.git
 cd grafana-network-topology
 npm install
 npm run package   # gera dist-zip/grafana-network-topology-<versão>.zip
