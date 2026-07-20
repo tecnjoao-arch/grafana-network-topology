@@ -8,6 +8,9 @@ limiares reais da interface, e testes de rede externos (Globalping).
 ![Grafana 10+](https://img.shields.io/badge/Grafana-10%2B-orange)
 ![Não assinado](https://img.shields.io/badge/plugin-unsigned-lightgrey)
 
+![Mapa de topologia em produção](docs/img/mapa.png)
+*Mapa real em produção — identificadores borrados por privacidade.*
+
 ## Recursos
 
 - **Editor draw.io-like**: arrasta nós, conecta com âncoras livres, rotas manuais (waypoints, ortogonal, curva), cards de interface arrastáveis.
@@ -17,6 +20,15 @@ limiares reais da interface, e testes de rede externos (Globalping).
 - **Modal por interface** no padrão time series do Grafana (crosshair, eixos redondos, legenda) e tooltip com mini-gráfico no hover.
 - **Testes de rede** (ping/traceroute/MTR/DNS) a partir de probes externas via Globalping — botão direito no equipamento ou botão flutuante.
 - **TV**: escala de fonte, auto-fit que preenche a tela, travar zoom/pan.
+
+## Screenshots
+
+| Modal da interface — DOM, limiares reais e histórico | Tooltip com mini-gráfico no hover |
+|---|---|
+| ![Modal da interface](docs/img/modal.png) | ![Tooltip de hover](docs/img/hover.png) |
+
+![Testes de rede — MTR a partir de probes externas](docs/img/testes.png)
+*Testes de rede (ping/traceroute/MTR/DNS) direto do mapa, via probes externas do Globalping.*
 
 ## Instalação (3 passos)
 
