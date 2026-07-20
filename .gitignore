@@ -7,3 +7,6 @@ dist/
 
 # Pacotes gerados
 dist-zip/
+
+# Screenshots originais (sem blur) — NUNCA versionar
+docs/brutos/
