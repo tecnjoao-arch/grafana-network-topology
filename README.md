@@ -64,4 +64,4 @@ falha o build.
 
 ## Licença
 
-Uso interno. Sem afiliação com Grafana Labs.
+[Apache 2.0](LICENSE). Sem afiliação com Grafana Labs.

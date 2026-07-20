@@ -35,7 +35,7 @@ export function niceCeil(v: number): number {
   return nf * base;
 }
 
-/** Divide uma string de endereços vinda do Zabbix ("200.20.96.1 | 2804:1f10::1")
+/** Divide uma string de endereços vinda do Zabbix ("198.51.100.1 | 2001:db8::1")
  *  em linhas separadas: IPv4 primeiro, IPv6 depois, e por fim o que não for IP
  *  (ex: "Sem IP"). Uma linha por endereço nos cards/modal. */
 export function splitIps(raw?: string): string[] {

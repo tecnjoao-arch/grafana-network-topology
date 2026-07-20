@@ -127,7 +127,7 @@ export const NetworkTestModal: React.FC<Props> = ({ initialTarget = '', token, o
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <input
               type="text"
-              placeholder="IP ou hostname público (ex: 200.20.96.101)"
+              placeholder="IP ou hostname público (ex: 8.8.8.8)"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') run(); }}
