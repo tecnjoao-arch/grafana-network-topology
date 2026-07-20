@@ -1,7 +1,8 @@
 # Instalação do Network Topology em um Grafana
 
-Guia pra instalar o plugin em uma nova instância de Grafana (servidor Linux).
-Para Docker, veja a seção no final.
+Guia completo de instalação num servidor Linux. Para Docker, veja a seção
+[Docker](#docker-alternativa). Para gerar o pacote a partir do código-fonte,
+veja [Instalação a partir do código](#instalação-a-partir-do-código-fonte).
 
 ## Pré-requisitos
 
@@ -9,54 +10,33 @@ Para Docker, veja a seção no final.
 - Acesso SSH com sudo no servidor do Grafana
 - **Datasource Zabbix** (alexanderzobnin-zabbix-datasource) configurado, se quiser
   os dados ao vivo — o plugin funciona sem, mas o mapa fica estático
-- Node.js 18+ **apenas** na máquina que gera o build (o servidor não precisa)
 
-## Passo 1 — Gerar o build (na máquina de desenvolvimento)
+## Passo 1 — Baixar e descompactar (direto no servidor)
 
-```powershell
-cd C:\Users\joaomarcos\Desktop\teste_grafana\grafana-network-topology
-npm install        # só na primeira vez
-npm run build
+Na página de **Releases** do repositório, copie o link do arquivo
+`grafana-network-topology-X.Y.Z.zip` e, no servidor:
+
+```bash
+cd /tmp
+wget https://github.com/SEU_USUARIO/grafana-network-topology/releases/download/vX.Y.Z/grafana-network-topology-X.Y.Z.zip
+# (sem wget? use: curl -L -O <link do zip>)
+
+# O zip já traz a pasta grafana-network-topology/ dentro:
+sudo unzip -o grafana-network-topology-*.zip -d /var/lib/grafana/plugins/
+sudo chown -R grafana:grafana /var/lib/grafana/plugins/grafana-network-topology
 ```
 
-Confira que a pasta `dist/` contém `plugin.json`, `module.js` e `img/`.
+> O caminho padrão de plugins é `/var/lib/grafana/plugins`. Se a sua instância
+> usa outro, confira `paths.plugins` no `grafana.ini` (ou a env `GF_PATHS_PLUGINS`).
 
-## Passo 2 — Enviar pro servidor
-
-Sempre zere a pasta de staging antes (evita herdar arquivos de deploys antigos
-e o clássico `dist/` aninhado do scp):
-
-```powershell
-ssh USUARIO@SERVIDOR "rm -rf /tmp/topo-plugin && mkdir -p /tmp/topo-plugin"
-scp -r dist\* USUARIO@SERVIDOR:/tmp/topo-plugin/
-```
-
-## Passo 3 — Conferir o que chegou (2 segundos que evitam 1 hora)
+Confira que chegou certo (2 segundos que evitam 1 hora):
 
 ```bash
 # TEM que responder: "id": "grafana-network-topology"
-grep '"id"' /tmp/topo-plugin/plugin.json
-
-# TEM que listar plugin.json e module.js na raiz (NÃO uma pasta "dist")
-ls /tmp/topo-plugin/
+grep '"id"' /var/lib/grafana/plugins/grafana-network-topology/plugin.json
 ```
 
-Se o id vier diferente, você rodou o `scp` da pasta de outro projeto — volte ao passo 1.
-
-## Passo 4 — Instalar na pasta de plugins
-
-> O caminho padrão é `/var/lib/grafana/plugins`. Se o Grafana da instância usa
-> outro, confira `paths.plugins` no `grafana.ini` (ou a env `GF_PATHS_PLUGINS`).
-
-```bash
-sudo rm -rf /var/lib/grafana/plugins/grafana-network-topology
-sudo mkdir -p /var/lib/grafana/plugins/grafana-network-topology
-sudo cp -r /tmp/topo-plugin/* /var/lib/grafana/plugins/grafana-network-topology/
-sudo chown -R grafana:grafana /var/lib/grafana/plugins/grafana-network-topology
-sudo chmod -R a+rX /var/lib/grafana/plugins/grafana-network-topology
-```
-
-## Passo 5 — Liberar o plugin não assinado
+## Passo 2 — Liberar o plugin não assinado
 
 ⚠️ **CUIDADO:** `allow_loading_unsigned_plugins` é uma lista separada por
 vírgula. Se a instância já tem outros plugins não assinados, **acrescente** o
@@ -79,7 +59,7 @@ grep -n "allow_loading_unsigned_plugins" /etc/grafana/grafana.ini
   allow_loading_unsigned_plugins = outro-plugin-a,outro-plugin-b,grafana-network-topology
   ```
 
-## Passo 6 (opcional) — Liberar os testes de rede (Globalping) no CSP
+## Passo 3 (opcional) — Liberar os testes de rede (Globalping) no CSP
 
 O modal "🌐 Testes de rede" chama a API `api.globalping.io` direto do navegador.
 Se o Grafana da instância tem CSP ativo, precisa liberar esse destino:
@@ -99,7 +79,7 @@ grep -n "content_security_policy" /etc/grafana/grafana.ini | head -3
 Sem esse passo o resto do plugin funciona normal — só os testes de rede dão
 "Failed to fetch".
 
-## Passo 7 — Reiniciar e validar
+## Passo 4 — Reiniciar e validar
 
 ```bash
 sudo systemctl restart grafana-server
@@ -113,7 +93,7 @@ msg="Permitting unsigned plugin. This is not recommended" pluginId=grafana-netwo
 msg="Plugin registered" pluginId=grafana-network-topology
 ```
 
-## Passo 8 — No navegador
+## Passo 5 — No navegador
 
 1. **Ctrl+Shift+R** (hard refresh — o cache segura a lista de plugins antiga).
 2. Dashboard → **Add panel** → visualização **"Network Topology"**.
@@ -122,10 +102,20 @@ msg="Plugin registered" pluginId=grafana-network-topology
 4. Configure as queries do Zabbix e use o **⚡ Auto-preenchimento** no editor
    de cada link pra amarrar as métricas.
 
-## Levando um mapa existente pra nova instância
+## Atualizando para uma nova versão
 
-A topologia inteira (nós, links, bindings) vive nas **options do painel**,
-dentro do JSON do dashboard — não no plugin. Pra migrar um mapa:
+```bash
+cd /tmp && wget <link do zip novo>
+sudo rm -rf /var/lib/grafana/plugins/grafana-network-topology
+sudo unzip grafana-network-topology-*.zip -d /var/lib/grafana/plugins/
+sudo chown -R grafana:grafana /var/lib/grafana/plugins/grafana-network-topology
+sudo systemctl restart grafana-server
+```
+
+E **Ctrl+Shift+R** no navegador. Os mapas não se perdem: a topologia vive no
+JSON dos dashboards, não no plugin.
+
+## Levando um mapa existente pra outra instância
 
 1. Na instância de origem: dashboard → Export → **Save JSON to file**.
 2. Na nova instância: Dashboards → **Import** → cole o JSON.
@@ -137,8 +127,8 @@ dentro do JSON do dashboard — não no plugin. Pra migrar um mapa:
 
 ## Docker (alternativa)
 
-Se a nova instância roda em container, não existe pasta no host nem
-`grafana.ini` — monte o volume e use as envs:
+Se a instância roda em container, não existe pasta no host nem `grafana.ini` —
+descompacte o zip numa pasta local, monte o volume e use as envs:
 
 ```yaml
 services:
@@ -146,24 +136,45 @@ services:
     image: grafana/grafana:12.3.3
     ports: ["3000:3000"]
     volumes:
-      - ./topo-plugin:/var/lib/grafana/plugins/grafana-network-topology
+      - ./grafana-network-topology:/var/lib/grafana/plugins/grafana-network-topology
     environment:
       GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: grafana-network-topology
       # (opcional) testes de rede com CSP ativo:
       # GF_SECURITY_CONTENT_SECURITY_POLICY: "true"
-      # GF_SECURITY_CONTENT_SECURITY_POLICY_TEMPLATE: "<template do passo 6>"
+      # GF_SECURITY_CONTENT_SECURITY_POLICY_TEMPLATE: "<template do passo 3>"
 ```
 
-`./topo-plugin` é a pasta com o conteúdo do `dist/`. Depois: `docker compose
-restart grafana`.
+`./grafana-network-topology` é a pasta extraída do zip. Depois:
+`docker compose restart grafana`.
+
+## Instalação a partir do código-fonte
+
+Para quem quer buildar em vez de usar a release (requer Node.js 18+ na máquina
+de build — o servidor não precisa):
+
+```bash
+git clone https://github.com/SEU_USUARIO/grafana-network-topology.git
+cd grafana-network-topology
+npm install
+npm run package   # gera dist-zip/grafana-network-topology-<versão>.zip
+```
+
+Envie o **zip** pro servidor e siga a partir do [Passo 1](#passo-1--baixar-e-descompactar-direto-no-servidor):
+
+```bash
+scp dist-zip/grafana-network-topology-*.zip USUARIO@SERVIDOR:/tmp/
+```
+
+> Enviar o zip (um arquivo) evita o clássico erro do `scp -r` de pasta que
+> cria diretórios aninhados no destino.
 
 ## Problemas comuns
 
 | Sintoma | Causa | Solução |
 |---|---|---|
-| "Plugin grafana-network-topology not found" | Arquivos ausentes, pasta aninhada ou id errado | Refaça os passos 2–4; confira o `grep '"id"'` |
-| Log: "Skipping loading plugin due to problem with signature" | Allowlist não aplicada | Passo 5 (lembre: lista com vírgula!) |
+| "Plugin grafana-network-topology not found" | Arquivos ausentes ou id errado | Refaça o Passo 1; confira o `grep '"id"'` |
+| Log: "Skipping loading plugin due to problem with signature" | Allowlist não aplicada | Passo 2 (lembre: lista com vírgula!) |
 | Painel aparece mas sem dados ao vivo | Queries apontando pra datasource errado após import | Reaponte o datasource do dashboard |
-| Testes de rede: "Failed to fetch" | CSP bloqueando api.globalping.io | Passo 6 |
-| Atualizou o plugin e nada mudou | Cache do navegador | Ctrl+Shift+R (o build já injeta versão única no plugin.json) |
+| Testes de rede: "Failed to fetch" | CSP bloqueando api.globalping.io | Passo 3 |
+| Atualizou o plugin e nada mudou | Cache do navegador | Ctrl+Shift+R (o build injeta versão única no plugin.json) |
 | Mapa sumiu após editar em outra viz | Painel salvo com outra visualização | Não salve o dashboard enquanto o plugin estiver "not found" |
