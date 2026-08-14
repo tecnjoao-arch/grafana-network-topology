@@ -74,7 +74,7 @@ export function resolveNodeStatus(
   if (r.state !== 'ok') {
     return r.state === 'stale'
       ? { status: 'down', cause: 'sem-coleta', detail: `Sem coleta${fmtAge(r.ageMs)}` }
-      : { status: 'down', cause: 'sem-serie', detail: 'Série não encontrada — confira o binding' };
+      : { status: 'down', cause: 'sem-serie', detail: 'Sem coleta — interface desabilitada ou binding incorreto' };
   }
 
   if (data.colorMappings && data.colorMappings.length > 0) {
@@ -154,7 +154,7 @@ export function resolveLinkStatus(i: LinkStatusInput): StatusOutcome {
         return {
           status: 'down',
           cause: 'sem-serie',
-          detail: `Série não encontrada (${s.label}) — confira o binding`,
+          detail: `Sem coleta (${s.label}) — interface desabilitada ou binding incorreto`,
         };
       }
     }

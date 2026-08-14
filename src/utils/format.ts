@@ -50,6 +50,81 @@ export function splitIps(raw?: string): string[] {
   return [...v4, ...v6, ...rest];
 }
 
+/** Separa o endereço de um sufixo de prefixo (/64) ou zona (%eth0). */
+function splitIpSuffix(raw: string): [string, string] {
+  const m = raw.match(/^([^/%]+)([/%].*)$/);
+  return m ? [m[1], m[2]] : [raw, ''];
+}
+
+/** Normaliza um IPv6 para a forma canônica (RFC 5952): minúsculas, sem zeros à
+ *  esquerda e "::" no MAIOR trecho de zeros.
+ *
+ *  O Zabbix costuma entregar formas não-canônicas como
+ *  "2804:1f18::9606:0:0:0:14", com o "::" num trecho menor que o 0:0:0 seguinte
+ *  — 4 caracteres a mais no card sem nenhuma informação a mais.
+ *  Devolve a entrada intacta se não parecer um IPv6 válido. */
+export function canonicalizeIpv6(raw: string): string {
+  const [addr, suffix] = splitIpSuffix(raw.trim());
+  if (!addr.includes(':')) return raw;
+
+  let groups: string[];
+  if (addr.includes('::')) {
+    const parts = addr.split('::');
+    if (parts.length !== 2) return raw;
+    const head = parts[0] ? parts[0].split(':') : [];
+    const tail = parts[1] ? parts[1].split(':') : [];
+    const missing = 8 - head.length - tail.length;
+    if (missing < 1) return raw;
+    groups = [...head, ...Array(missing).fill('0'), ...tail];
+  } else {
+    groups = addr.split(':');
+  }
+  if (groups.length !== 8) return raw;
+
+  groups = groups.map((g) => {
+    const v = g.replace(/^0+/, '').toLowerCase();
+    return v === '' ? '0' : v;
+  });
+  if (groups.some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return raw;
+
+  // Maior corrida de zeros; empate vai pra da esquerda. Só comprime 2+ grupos
+  // (a RFC proíbe "::" para um zero solitário).
+  let bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
+  for (let i = 0; i < 8; i++) {
+    if (groups[i] === '0') {
+      if (curStart < 0) curStart = i;
+      curLen++;
+      if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; }
+    } else {
+      curStart = -1; curLen = 0;
+    }
+  }
+
+  const out = bestLen >= 2
+    ? `${groups.slice(0, bestStart).join(':')}::${groups.slice(bestStart + bestLen).join(':')}`
+    : groups.join(':');
+  return out + suffix;
+}
+
+/** Abrevia um IPv6 para "prefixo…:host" — ex: "2804:1f18…:14".
+ *  Num mapa de rede o prefixo se repete em todo mundo e quem identifica a
+ *  interface é o último grupo; o endereço inteiro continua no modal, no tooltip
+ *  e ao copiar. Se não render menor que a forma canônica, devolve a canônica. */
+export function shortenIpv6(raw: string): string {
+  const canon = canonicalizeIpv6(raw);
+  const [addr, suffix] = splitIpSuffix(canon);
+  if (!addr.includes(':')) return canon;
+
+  const groups = addr.split(':').filter((g) => g !== '');
+  if (groups.length < 3) return canon;
+  // Só abrevia o que é mesmo IPv6: texto qualquer com dois-pontos (o Zabbix
+  // manda coisas como "Sem IP" e nomes de item) não pode virar "abc…:z".
+  if (groups.some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return canon;
+
+  const short = `${groups.slice(0, 2).join(':')}…:${groups[groups.length - 1]}${suffix}`;
+  return short.length < canon.length ? short : canon;
+}
+
 /** Passo "bonito" de eixo (1/2/2.5/5 × 10^n) mais próximo de `raw` — estilo Grafana. */
 export function niceStep(raw: number): number {
   if (raw <= 0) return 1;

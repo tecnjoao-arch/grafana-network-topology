@@ -501,6 +501,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         targetModuleInfo: tgtModule,
 
         showIp: showIp,
+        shortIpv6: options.shortenIpv6 ?? DEFAULT_OPTIONS.shortenIpv6,
         searchQuery: searchQuery,
         hideTrafficBox: hideTrafficCards,
         color: edgeColor,

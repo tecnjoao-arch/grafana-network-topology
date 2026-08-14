@@ -72,6 +72,17 @@ export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
         defaultValue: DEFAULT_OPTIONS.dimLinksOnNodeDown,
         category: ['Visual'],
       })
+      .addBooleanSwitch({
+        path: 'shortenIpv6',
+        name: 'Abreviar IPv6 nos cards',
+        description:
+          'Mostra "2804:1f18…:14" em vez do endereço inteiro — os cards ficam bem ' +
+          'mais estreitos e param de se sobrepor. O endereço completo continua no ' +
+          'modal, no título ao passar o mouse e ao copiar. Desligue se você tiver ' +
+          'interfaces que só se distinguem pelo miolo do endereço.',
+        defaultValue: DEFAULT_OPTIONS.shortenIpv6,
+        category: ['Visual'],
+      })
       .addColorPicker({
         path: 'downColor',
         name: 'Cor do link DOWN',

@@ -7,7 +7,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { EdgeProps, EdgeLabelRenderer, useInternalNode, useReactFlow, getBezierPath, getSmoothStepPath, Position } from '@xyflow/react';
 import { LinkEdgeData, LabelFooter } from '../../types';
-import { formatBitsPerSec, linkUtilization, splitIps } from '../../utils/format';
+import { formatBitsPerSec, linkUtilization, splitIps, canonicalizeIpv6, shortenIpv6 } from '../../utils/format';
 import { evalOptical, rxThresholds, txThresholds, OpticalLevel } from '../../utils/optics';
 import { getEdgeParams } from '../../utils/floatingEdge';
 import { useEditor } from '../EditorContext';
@@ -524,6 +524,7 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             y={srcLabelPos.y}
             color={color}
             showTraffic={!!data.showTrafficBox && !data.hideTrafficBox}
+            shortIpv6={!!data.shortIpv6}
             draggable={editMode}
             onDragDown={onLabelDown('source')}
             onDragMove={onLabelMove}
@@ -551,6 +552,7 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             y={tgtLabelPos.y}
             color={color}
             showTraffic={!!data.showTrafficBox && !data.hideTrafficBox}
+            shortIpv6={!!data.shortIpv6}
             draggable={editMode}
             onDragDown={onLabelDown('target')}
             onDragMove={onLabelMove}
@@ -611,6 +613,8 @@ const IfLabel: React.FC<{
   onDragDown?: (e: React.PointerEvent) => void;
   onDragMove?: (e: React.PointerEvent) => void;
   onDragUp?: (e: React.PointerEvent) => void;
+  /** Abrevia o IPv6 no card ("2804:1f18…:14"); completo no título e ao copiar */
+  shortIpv6?: boolean;
   /** Fora do modo edição: clique abre o modal com os detalhes desta interface */
   onOpenDetails?: () => void;
   /** Hover → tooltip deste lado específico */
@@ -621,7 +625,7 @@ const IfLabel: React.FC<{
   /** Avaliação da potência contra os limiares reais (colore e marca ⚠) */
   txLevel?: OpticalLevel;
   rxLevel?: OpticalLevel;
-}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, draggable, onDragDown, onDragMove, onDragUp, onOpenDetails, onHover, onHoverEnd, dim, txLevel, rxLevel }) => {
+}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, shortIpv6, draggable, onDragDown, onDragMove, onDragUp, onOpenDetails, onHover, onHoverEnd, dim, txLevel, rxLevel }) => {
   // Copiar por endereço (IPv4 e IPv6 são linhas separadas no card)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const copyAddr = (addr: string, idx: number) => (e: React.MouseEvent) => {
@@ -674,10 +678,13 @@ const IfLabel: React.FC<{
         )}
       </div>
       {ip && splitIps(ip).map((addr, idx) => (
-        // IPv4 na primeira linha, IPv6 (mais longo) menor na linha de baixo
+        // IPv4 na primeira linha, IPv6 (mais longo) menor na linha de baixo.
+        // O IPv6 é normalizado (e abreviado, se a opção estiver ligada) só na
+        // exibição: o título e o clique de copiar entregam o endereço inteiro.
         <span
           key={idx}
           onClick={copyAddr(addr, idx)}
+          title={addr}
           style={{
             color: copiedIdx === idx ? '#4ade80' : '#22d3ee',
             fontSize: idx === 0 ? '0.9em' : '0.78em',
@@ -689,7 +696,7 @@ const IfLabel: React.FC<{
             transition: 'all 0.2s',
           }}
         >
-          {copiedIdx === idx ? 'Copiado!' : addr}
+          {copiedIdx === idx ? 'Copiado!' : (shortIpv6 ? shortenIpv6(addr) : canonicalizeIpv6(addr))}
         </span>
       ))}
       {showTraffic && (tx !== undefined || rx !== undefined) && (

@@ -7,7 +7,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { DataFrame } from '@grafana/data';
 import { LinkEdgeData, MetricBinding, ModuleInfo, OpticKey } from '../types';
-import { formatBitsPerSec, linkUtilization, niceCeil, niceStep, fmtAxisBps, splitIps } from '../utils/format';
+import { formatBitsPerSec, linkUtilization, niceCeil, niceStep, fmtAxisBps, splitIps, canonicalizeIpv6 } from '../utils/format';
 import { resolveBindingSeries, BindingSeries } from '../utils/dataBinding';
 import { evalOptical, rxThresholds, txThresholds, formatRange, OpticalLevel } from '../utils/optics';
 
@@ -202,9 +202,11 @@ const FocusedView: React.FC<{ side: SideInfo; speed?: number }> = ({ side, speed
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <div style={{ background: '#0b1220', border: '1px solid #33415580', borderRadius: 8, padding: '10px 12px' }}>
             <div style={{ fontSize: 10.5, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Endereços IP</div>
+            {/* Normalizado, mas NUNCA abreviado: aqui sobra espaço e é onde o
+                operador vem buscar o endereço inteiro pra copiar. */}
             {splitIps(side.ip).map((addr, i) => (
               <div key={i} style={{ marginTop: 4, color: '#cbd5e1', fontSize: i === 0 ? 15 : 13, fontWeight: 700, fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                {addr}
+                {canonicalizeIpv6(addr)}
               </div>
             ))}
           </div>

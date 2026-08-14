@@ -216,12 +216,18 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
       </div>
       {/* Obedece ao mesmo toggle de IP dos cards de link: antes o botão da
           barra escondia só os cards e o IP do nó continuava exposto — meio
-          toggle não serve pra apresentar o mapa em tela pública. */}
-      {ip && showIp !== false && (
+          toggle não serve pra apresentar o mapa em tela pública.
+          `visibility` em vez de deixar de renderizar: removendo o elemento o nó
+          ENCOLHE, e como as arestas saem do centro do nó, o mapa inteiro se
+          desloca ao ligar/desligar o botão. Ocupando o espaço vazio, o layout
+          que o usuário posicionou à mão fica idêntico nos dois estados. */}
+      {ip && (
         <div
-          onClick={handleCopy}
-          title="Clique para copiar o IP"
+          onClick={showIp === false ? undefined : handleCopy}
+          title={showIp === false ? undefined : 'Clique para copiar o IP'}
+          aria-hidden={showIp === false}
           style={{
+            visibility: showIp === false ? 'hidden' : 'visible',
             color: copied ? '#4ade80' : '#94a3b8',
             fontSize: '0.75em',
             fontFamily: 'monospace',
