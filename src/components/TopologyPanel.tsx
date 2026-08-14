@@ -11,7 +11,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import {
-  PanelOptions, NetworkTopology, LinkEdgeData, DEFAULT_OPTIONS,
+  PanelOptions, NetworkTopology, LinkEdgeData, DEFAULT_OPTIONS, LinkStatus,
   OPTIC_KEYS, OpticKey, MetricBinding, ModuleInfoBindings, ModuleInfo,
 } from '../types';
 import { DataFrame } from '@grafana/data';
@@ -24,8 +24,11 @@ import { EdgeEditor } from './EdgeEditor';
 import { NodeEditor } from './NodeEditor';
 import { EditorProvider } from './EditorContext';
 import { LinkEdgeData as LinkData } from '../types';
-import { resolveBinding, resolveTextBinding, listSeriesKeys, setStaleThresholdMs } from '../utils/dataBinding';
-import { resolveNodeStatus, NodeLiveStatus } from '../utils/status';
+import {
+  resolveBinding, resolveTextBinding, listSeriesKeys, setStaleThresholdMs,
+  resolveBindingDetailed,
+} from '../utils/dataBinding';
+import { resolveNodeStatus, resolveLinkStatus, NodeLiveStatus, SideStatus } from '../utils/status';
 
 // Gera ids únicos e estáveis dentro do processo. Date.now() sozinho colide
 // quando o usuário duplica/cola vários nós no mesmo milissegundo.
@@ -237,24 +240,47 @@ export const TopologyPanel: React.FC<Props> = (props) => {
   // Modal de testes de rede (Globalping): null = fechado; string = alvo inicial
   const [testTarget, setTestTarget] = useState<string | null>(null);
 
+  // Datasource sem resposta: com o mapa esperando dados e NADA chegando, nada
+  // aqui é confiável — tudo vira cinza (e não vermelho, que seria inventar
+  // queda de rede quando o problema é a fonte de dados). Mapa recém-criado,
+  // sem binding nenhum, não conta como "sem dados": só está vazio.
+  const noData = useMemo(() => {
+    if (series.length > 0) return false;
+    return topology.nodes.some((n) => n.data.statusBinding)
+      || topology.edges.some((e) =>
+        e.data.sourceStatusBinding || e.data.targetStatusBinding || e.data.statusBinding
+        || e.data.trafficUpBinding || e.data.sourceTrafficUpBinding || e.data.targetTrafficUpBinding);
+  }, [series, topology]);
+
   // Status ao vivo de CADA nó, calculado uma única vez por refresh e
-  // compartilhado entre os memos de nós e de arestas (nó down → links apagados).
+  // compartilhado entre os memos de nós e de arestas (nó down → links down).
   const nodeLive = useMemo(() => {
     const m = new Map<string, NodeLiveStatus>();
-    for (const n of topology.nodes) m.set(n.id, resolveNodeStatus(n.data, series));
+    for (const n of topology.nodes) m.set(n.id, resolveNodeStatus(n.data, series, noData));
     return m;
-  }, [topology, series]);
+  }, [topology, series, noData]);
+
+  // Nome legível de cada nó — usado nas mensagens de causa ("RTR-01 sem resposta")
+  const nodeLabels = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const n of topology.nodes) m.set(n.id, n.data.label || n.id);
+    return m;
+  }, [topology]);
 
   // Nós: injeta status/cor resolvidos + extras de render
   const initialNodes: Node[] = useMemo(
     () => topology.nodes.map((n) => {
-      const { status, color } = nodeLive.get(n.id) ?? {};
+      const { status, color, cause, detail } = nodeLive.get(n.id) ?? {};
       return {
         id: n.id,
         type: 'device',
         position: n.position,
         // fontScale injetado: o DeviceNode usa pra escalar ícone e badge (px fixos)
-        data: { ...n.data, status, color, searchQuery, fontScale: options.fontScale ?? 1 } as any,
+        data: {
+          ...n.data, status, color, searchQuery,
+          statusCause: cause, statusDetail: detail,
+          fontScale: options.fontScale ?? 1,
+        } as any,
       };
     }),
     [topology, nodeLive, searchQuery, options.fontScale]
@@ -263,8 +289,21 @@ export const TopologyPanel: React.FC<Props> = (props) => {
   // Arestas: aplica binding de up/down/speed e IP das séries
   const initialEdges: Edge[] = useMemo(
     () => topology.edges.map((e) => {
-      const up = resolveBinding(series, e.data.trafficUpBinding);
-      const down = resolveBinding(series, e.data.trafficDownBinding);
+      // Tráfego: binding configurado que não resolve (obsoleto ou série sumida)
+      // vira ZERO — nunca o último valor conhecido, nunca o valor do vizinho.
+      // Valor velho persistindo foi o que manteve "tráfego passando" em links
+      // já derrubados. `fresh` marca o que é medição de agora: só isso serve
+      // como prova de vida pra inferir status.
+      const traffic = (b?: MetricBinding): { v?: number; fresh: boolean } => {
+        if (!b) return { fresh: false };
+        const r = resolveBindingDetailed(series, b);
+        return r.state === 'ok' ? { v: r.value, fresh: true } : { v: 0, fresh: false };
+      };
+
+      const upT = traffic(e.data.trafficUpBinding);
+      const downT = traffic(e.data.trafficDownBinding);
+      const up = upT.v;
+      const down = downT.v;
       // Capacidade é quase-estática e no Zabbix costuma ser coletada de hora em
       // hora — não pode ser descartada pela checagem de obsolescência (stale).
       const speed = resolveBinding(series, e.data.speedBinding, { ignoreStale: true });
@@ -278,10 +317,14 @@ export const TopologyPanel: React.FC<Props> = (props) => {
       const tgtErr = resolveBinding(series, e.data.targetErrorBinding, { ignoreStale: true });
 
       // Bindings específicos por interface (lado A / lado B)
-      const srcUp = resolveBinding(series, e.data.sourceTrafficUpBinding);
-      const srcDown = resolveBinding(series, e.data.sourceTrafficDownBinding);
-      const tgtUp = resolveBinding(series, e.data.targetTrafficUpBinding);
-      const tgtDown = resolveBinding(series, e.data.targetTrafficDownBinding);
+      const srcUpT = traffic(e.data.sourceTrafficUpBinding);
+      const srcDownT = traffic(e.data.sourceTrafficDownBinding);
+      const tgtUpT = traffic(e.data.targetTrafficUpBinding);
+      const tgtDownT = traffic(e.data.targetTrafficDownBinding);
+      const srcUp = srcUpT.v;
+      const srcDown = srcDownT.v;
+      const tgtUp = tgtUpT.v;
+      const tgtDown = tgtDownT.v;
 
       // Fibra (DOM): idem — temperatura/voltagem/bias costumam ser coletadas a
       // cada 5 min; o filtro de stale (180s) as matava no meio do ciclo.
@@ -304,41 +347,100 @@ export const TopologyPanel: React.FC<Props> = (props) => {
       const srcModule = resolveModuleInfo(series, e.data.sourceModuleInfoBindings);
       const tgtModule = resolveModuleInfo(series, e.data.targetModuleInfoBindings);
       
-      const hasBinding = !!(e.data.trafficUpBinding || e.data.trafficDownBinding || e.data.sourceTrafficUpBinding || e.data.targetTrafficUpBinding);
-      const resolved = up !== undefined || down !== undefined || srcUp !== undefined || tgtUp !== undefined;
+      // Tráfego por lado (A=origem, B=destino). Precedência: binding do lado →
+      // binding global → ESPELHO do outro lado (num link p2p, inbound de A =
+      // outbound de B) → estáticos.
+      //
+      // O espelho só age em lado SEM binding próprio, e só copia valor FRESCO.
+      // Antes ele preenchia qualquer lado, então uma ponta morta herdava o
+      // número da ponta viva e o card exibia tráfego num link caído. Lado com
+      // binding próprio agora mostra o que ele mesmo mediu — inclusive o zero.
+      const peer = (t: { v?: number; fresh: boolean }) => (t.fresh ? t.v : undefined);
+      const sourceUp = e.data.sourceTrafficUpBinding ? srcUp
+        : up ?? peer(tgtDownT) ?? e.data.sourceTrafficUp ?? e.data.trafficUp;
+      const sourceDown = e.data.sourceTrafficDownBinding ? srcDown
+        : down ?? peer(tgtUpT) ?? e.data.sourceTrafficDown ?? e.data.trafficDown;
+      const targetUp = e.data.targetTrafficUpBinding ? tgtUp
+        : down ?? peer(srcDownT) ?? e.data.targetTrafficUp ?? e.data.trafficDown ?? e.data.trafficUp;
+      const targetDown = e.data.targetTrafficDownBinding ? tgtDown
+        : up ?? peer(srcUpT) ?? e.data.targetTrafficDown ?? e.data.trafficUp ?? e.data.trafficDown;
 
-      const liveStatusVal = resolveBinding(series, e.data.statusBinding);
+      // Prova de vida: só medição fresca conta. Alimenta a inferência de status
+      // dos links que ainda não têm operStatus amarrado nos dois lados.
+      const freshTraffic = [upT, downT, srcUpT, srcDownT, tgtUpT, tgtDownT]
+        .reduce((mx, t) => (t.fresh ? Math.max(mx, t.v ?? 0) : mx), 0);
+
       let edgeColor = e.data.color;
       let edgeAnim = e.data.animation;
       let edgeLineStyle = e.data.lineStyle;
-      let edgeStatus = hasBinding ? (resolved ? 'up' : 'unknown') : e.data.status;
 
-      if (e.data.statusBinding && liveStatusVal !== undefined) {
-        if (e.data.colorMappings && e.data.colorMappings.length > 0) {
-          const liveStr = String(liveStatusVal).trim().toLowerCase();
-          const matched = e.data.colorMappings.find(
+      // ── Status operacional: os DOIS lados ────────────────────────────────
+      // Só entram os lados COM binding configurado. O link é 'up' apenas se
+      // todos concordarem: com um binding só (modelo antigo), o status vinha de
+      // uma ponta e o link seguia verde com a outra morta.
+      const sides: SideStatus[] = [];
+      if (e.data.sourceStatusBinding) {
+        sides.push({
+          label: e.data.sourceInterface || nodeLabels.get(e.source) || 'lado A',
+          result: resolveBindingDetailed(series, e.data.sourceStatusBinding),
+        });
+      }
+      if (e.data.targetStatusBinding) {
+        sides.push({
+          label: e.data.targetInterface || nodeLabels.get(e.target) || 'lado B',
+          result: resolveBindingDetailed(series, e.data.targetStatusBinding),
+        });
+      }
+
+      // O statusBinding legado tem dois usos históricos. Com colorMappings ele
+      // é COSMÉTICO (mapeia valor→cor, inclusive de métricas que não são
+      // status) e continua só pintando; sem mappings ele era simplesmente
+      // ignorado — agora vira fonte de status de verdade.
+      const legacyIsCosmetic = !!(e.data.colorMappings && e.data.colorMappings.length > 0);
+      if (e.data.statusBinding && !legacyIsCosmetic) {
+        sides.push({
+          label: 'link',
+          result: resolveBindingDetailed(series, e.data.statusBinding),
+        });
+      }
+
+      // Equipamento da ponta caído: causa raiz, ganha do resto. A opção segue
+      // valendo pra quem não quer essa propagação.
+      const downEndpoint = (options.dimLinksOnNodeDown ?? true)
+        ? (nodeLive.get(e.source)?.status === 'down' ? nodeLabels.get(e.source)
+          : nodeLive.get(e.target)?.status === 'down' ? nodeLabels.get(e.target) : undefined)
+        : undefined;
+
+      const outcome = resolveLinkStatus({
+        noData,
+        endpointDown: downEndpoint,
+        sides,
+        operator: e.data.statusOperator,
+        value: e.data.statusValue,
+        freshTraffic,
+      });
+      let edgeStatus: LinkStatus = outcome.status;
+
+      // Regras cosméticas: pintam o que não está down. Um link com os dois
+      // lados caídos não pode voltar a verde por mapeamento — status estrutural
+      // ganha de cor configurada.
+      if (legacyIsCosmetic && edgeStatus !== 'down') {
+        const r = resolveBindingDetailed(series, e.data.statusBinding);
+        if (r.state === 'ok') {
+          const liveStr = String(r.value).trim().toLowerCase();
+          const matched = e.data.colorMappings!.find(
             (m) => String(m.value).trim().toLowerCase() === liveStr
           );
           if (matched) {
             edgeColor = matched.color;
             edgeAnim = matched.animation ?? 'none';
             if (matched.lineStyle) edgeLineStyle = matched.lineStyle; // traçado por regra
-            edgeStatus = 'up'; // Mark as up to apply color and animation properly
+            edgeStatus = 'up';
           } else {
-            edgeStatus = 'unknown'; // Gray/unknown if status metric is resolved but no rule matches
+            edgeStatus = 'unknown'; // valor resolvido mas sem regra correspondente
           }
         }
       }
-
-      // Tráfego por lado (A=origem, B=destino). O lado B espelha o A: o "upload"
-      // de B corresponde ao "download" do link e vice-versa. Precedência em cada
-      // campo: binding do lado → binding global → ESPELHO ao vivo do outro lado
-      // (num link p2p, inbound de A = outbound de B) → estáticos. O espelho evita
-      // que um lado fique "—" quando só o outro tem bindings configurados.
-      const sourceUp   = srcUp   ?? up   ?? tgtDown ?? e.data.sourceTrafficUp   ?? e.data.trafficUp;
-      const sourceDown = srcDown ?? down ?? tgtUp   ?? e.data.sourceTrafficDown ?? e.data.trafficDown;
-      const targetUp   = tgtUp   ?? down ?? srcDown ?? e.data.targetTrafficUp   ?? e.data.trafficDown ?? e.data.trafficUp;
-      const targetDown = tgtDown ?? up   ?? srcUp   ?? e.data.targetTrafficDown ?? e.data.trafficUp   ?? e.data.trafficDown;
 
       // Congestionamento: link "up" passando de 90% de utilização vira laranja,
       // mesmo com threshold verde (saturação é mais crítica que o status up).
@@ -351,16 +453,14 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         edgeStatus = 'warning';
       }
 
-      // PRECEDÊNCIA MÁXIMA — nó down apaga os links adjacentes: o status de
-      // aresta vem do ifOperStatus de UM lado só, então com o vizinho morto os
-      // links ficavam inconsistentes (uns vermelhos, outros cinzas). Apagados,
-      // a leitura de NOC vira "o problema é o equipamento, não os links".
-      const endpointDown = (options.dimLinksOnNodeDown ?? true) &&
-        (nodeLive.get(e.source)?.status === 'down' || nodeLive.get(e.target)?.status === 'down');
-      if (endpointDown) {
-        edgeStatus = 'unknown';
-        edgeAnim = 'none';
-        edgeColor = undefined; // cinza automático do status unknown
+      // Aparência do DOWN: vale pro mapa inteiro (opção de painel), com
+      // override por link. Substitui o antigo modo "apagado" — link caído agora
+      // é vermelho e visível, não esmaecido. Sobrepõe cor manual de propósito:
+      // queda precisa ser inconfundível, mesmo em link com cor customizada.
+      if (edgeStatus === 'down') {
+        edgeColor = e.data.downColor ?? options.downColor ?? DEFAULT_OPTIONS.downColor;
+        edgeLineStyle = e.data.downLineStyle ?? options.downLineStyle ?? DEFAULT_OPTIONS.downLineStyle;
+        edgeAnim = e.data.downAnimation ?? options.downAnimation ?? DEFAULT_OPTIONS.downAnimation;
       }
 
       const liveData: LinkEdgeData = {
@@ -407,8 +507,11 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         animation: edgeAnim,
         lineStyle: edgeLineStyle,
         status: edgeStatus,
-        // Apagado (nó adjacente down): LinkEdge/cards renderizam com opacidade baixa
-        dimmed: endpointDown,
+        // Causa do status: vira texto no card/tooltip/modal, pra distinguir
+        // "equipamento sem resposta" de "sem coleta" e de "série não encontrada"
+        // (esta última quase sempre é binding errado, não queda de rede).
+        statusCause: outcome.cause,
+        statusDetail: outcome.detail,
         // Escala da fonte injetada: o card (LinkEdge) usa pra afastar os labels
         // proporcionalmente, senão eles colidem ao aumentar a escala.
         fontScale: options.fontScale ?? 1,
@@ -421,7 +524,9 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         data: liveData as any,
       };
     }),
-    [topology, series, showIp, searchQuery, hideTrafficCards, options.fontScale, nodeLive, options.dimLinksOnNodeDown]
+    [topology, series, showIp, searchQuery, hideTrafficCards, options.fontScale, nodeLive,
+      options.dimLinksOnNodeDown, noData, nodeLabels,
+      options.downColor, options.downLineStyle, options.downAnimation]
   );
 
   return (

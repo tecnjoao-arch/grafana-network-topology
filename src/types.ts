@@ -45,6 +45,21 @@ export interface ValueMapping {
 /** Traçado da linha */
 export type LineStyle = 'solid' | 'dashed' | 'dotted' | 'double';
 
+/** Quais cards de interface mostrar num link. */
+export type CardsSide = 'both' | 'source' | 'target' | 'none';
+export const CARDS_SIDES: CardsSide[] = ['both', 'source', 'target', 'none'];
+
+/** Por que o status é o que é — vira texto na tela, para o operador saber se
+ *  manda técnico ao campo ou revisa a configuração. */
+export type StatusCause =
+  | 'nodata'          // datasource não respondeu: nada é confiável agora
+  | 'ping'            // equipamento não responde ao binding de status do nó
+  | 'iface'           // ifOperStatus de algum lado diz down
+  | 'sem-coleta'      // binding configurado, série existe mas parou de atualizar
+  | 'sem-serie'       // binding configurado e nenhuma série casa (config? item removido?)
+  | 'inferido'        // sem operStatus: up deduzido de tráfego fresco
+  | 'nao-configurado'; // nada amarrado — indeterminado, nunca verde
+
 /** Animação da linha (independente do traçado) */
 export type LineAnimation = 'none' | 'flow' | 'reverse' | 'pulse' | 'glow';
 
@@ -200,8 +215,35 @@ export interface LinkEdgeData {
   /** Valor resolvido de erros de destino (uso interno) */
   targetErrors?: number;
   
-  /** Binding de status customizado para a aresta (se necessário para thresholds) */
+  /** Binding de status customizado para a aresta (se necessário para thresholds).
+   *  LEGADO: mantido para mapas montados antes dos bindings por lado. Continua
+   *  valendo como termo adicional — se disser down, o link fica down. */
   statusBinding?: MetricBinding;
+
+  /** Status operacional da interface de CADA lado (ifOperStatus). O link só é
+   *  'up' se AMBOS os lados configurados estiverem up: com um binding só, o
+   *  status vinha de um lado e o link ficava verde com o vizinho morto. */
+  sourceStatusBinding?: MetricBinding;
+  targetStatusBinding?: MetricBinding;
+  /** Regra de leitura dos bindings de status acima. O padrão do plugin é o
+   *  ifOperStatus do Zabbix (1=up, 2=down) — atenção: um operador '>' com alvo
+   *  0 leria 2 (down) como UP, que é o erro clássico dessa métrica. */
+  statusOperator?: StatusOperator;
+  statusValue?: number;
+
+  /** Quais cards de interface exibir neste link. Ausente = 'both'.
+   *  Esconder é só visual: bindings e nome da interface continuam salvos. */
+  cardsSide?: CardsSide;
+
+  /** Aparência deste link quando DOWN. Ausente = usa a opção do painel. */
+  downColor?: string;
+  downLineStyle?: LineStyle;
+  downAnimation?: LineAnimation;
+
+  /** Causa do status atual (calculada ao vivo, não persistida) */
+  statusCause?: StatusCause;
+  /** Texto pronto explicando a causa (ao vivo, não persistido) */
+  statusDetail?: string;
 
   /** Métricas de Fibra DOM - Origem (Lado A) */
   sourceDomTempBinding?: MetricBinding;
@@ -290,6 +332,12 @@ export interface PanelOptions {
   staleThresholdSec: number;
   /** Nó down apaga (esmaece) os links adjacentes */
   dimLinksOnNodeDown: boolean;
+  /** Aparência dos links DOWN, para o mapa inteiro (override por link no editor).
+   *  'flow'/'reverse' simulam bits andando e num link caído passam a impressão
+   *  de tráfego — 'pulse' chama atenção sem inventar movimento. */
+  downColor: string;
+  downLineStyle: LineStyle;
+  downAnimation: LineAnimation;
   /** Token do Globalping (opcional): aumenta a cota dos testes de rede.
    *  Atenção: fica visível no JSON do dashboard (risco baixo — só controla cota). */
   globalpingToken?: string;
@@ -311,6 +359,9 @@ export const DEFAULT_OPTIONS: PanelOptions = {
   showLegend: true,
   staleThresholdSec: 180,
   dimLinksOnNodeDown: true,
+  downColor: '#ef4444',
+  downLineStyle: 'solid',
+  downAnimation: 'pulse',
   globalpingToken: '',
 };
 

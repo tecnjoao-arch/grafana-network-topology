@@ -142,18 +142,46 @@ export interface ResolveOpts {
   ignoreStale?: boolean;
 }
 
-/** Resolve o valor numérico de um binding. undefined se nada casar. */
+/** Por que um binding não entregou valor. A diferença importa para o NOC:
+ *  'stale'   = a série existe mas parou de atualizar (item desabilitado no
+ *              Zabbix, coletor parado) → queda real, manda técnico.
+ *  'missing' = nenhuma série casou o matcher (item renomeado/removido, ou erro
+ *              de digitação no binding) → provável problema de configuração.
+ *  Sem essa distinção, um typo no binding fica visualmente idêntico a uma
+ *  queda de verdade e vira fábrica de alarme falso. */
+export type BindingState = 'ok' | 'stale' | 'missing';
+
+export interface BindingResult {
+  value?: number;
+  state: BindingState;
+  /** Idade da última amostra válida em ms (preenchido quando state='stale') */
+  ageMs?: number;
+}
+
+const MISSING: BindingResult = Object.freeze({ state: 'missing' });
+
+/** Resolve o valor numérico de um binding. undefined se nada casar.
+ *  Atalho de `resolveBindingDetailed` para quem só quer o número. */
 export function resolveBinding(series: DataFrame[], binding?: MetricBinding, opts?: ResolveOpts): number | undefined {
-  if (!binding || !binding.match || series.length === 0) return undefined;
+  return resolveBindingDetailed(series, binding, opts).value;
+}
+
+/** Resolve um binding devolvendo valor E o motivo da ausência (ver BindingState). */
+export function resolveBindingDetailed(
+  series: DataFrame[],
+  binding?: MetricBinding,
+  opts?: ResolveOpts
+): BindingResult {
+  if (!binding || !binding.match || series.length === 0) return MISSING;
 
   const idx = getIndex(series);
   const agg = binding.aggregation ?? 'last';
   const ignoreStale = !!opts?.ignoreStale;
-  const cacheKey = `n|${binding.query ?? ''}|${agg}|${defaultStaleMs}|${ignoreStale ? 'S0' : 'S1'}|${binding.match}`;
-  if (idx.results.has(cacheKey)) return idx.results.get(cacheKey) as number | undefined;
+  const cacheKey = `d|${binding.query ?? ''}|${agg}|${defaultStaleMs}|${ignoreStale ? 'S0' : 'S1'}|${binding.match}`;
+  if (idx.results.has(cacheKey)) return idx.results.get(cacheKey) as BindingResult;
 
   const matches = makeMatcher(binding.match);
-  let out: number | undefined = undefined;
+  let out: BindingResult = MISSING;
 
   for (const f of idx.fields) {
     if (!f.isNumber) continue;
@@ -192,16 +220,21 @@ export function resolveBinding(series: DataFrame[], binding?: MetricBinding, opt
           : 0;
         const tolerance = Math.max(defaultStaleMs, interval * 2.5);
         if (!isNaN(tVal) && (idx.maxTime - tVal > tolerance)) {
-          break; // Obsoleto: não resolve valor (força queda no status)
+          // Obsoleto: não resolve valor (força queda no status)
+          out = { state: 'stale', ageMs: idx.maxTime - tVal };
+          break;
         }
       }
     }
 
     const reduced = reduce(vals, agg);
     if (reduced !== undefined) {
-      out = reduced;
+      out = { value: reduced, state: 'ok' };
       break;
     }
+    // Série casou mas não tem nenhum ponto numérico utilizável: registra que
+    // ela EXISTE (não é 'missing') e segue procurando um campo melhor.
+    if (out.state === 'missing') out = { state: 'stale' };
   }
 
   idx.results.set(cacheKey, out);
