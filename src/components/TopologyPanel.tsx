@@ -14,7 +14,7 @@ import {
   PanelOptions, NetworkTopology, LinkEdgeData, DEFAULT_OPTIONS, LinkStatus,
   OPTIC_KEYS, OpticKey, MetricBinding, ModuleInfoBindings, ModuleInfo,
 } from '../types';
-import { DataFrame } from '@grafana/data';
+import { DataFrame, LoadingState } from '@grafana/data';
 import { DeviceNode } from './nodes/DeviceNode';
 import { LinkEdge } from './edges/LinkEdge';
 import { LinkTooltip } from './LinkTooltip';
@@ -240,17 +240,29 @@ export const TopologyPanel: React.FC<Props> = (props) => {
   // Modal de testes de rede (Globalping): null = fechado; string = alvo inicial
   const [testTarget, setTestTarget] = useState<string | null>(null);
 
-  // Datasource sem resposta: com o mapa esperando dados e NADA chegando, nada
-  // aqui é confiável — tudo vira cinza (e não vermelho, que seria inventar
-  // queda de rede quando o problema é a fonte de dados). Mapa recém-criado,
-  // sem binding nenhum, não conta como "sem dados": só está vazio.
-  const noData = useMemo(() => {
-    if (series.length > 0) return false;
-    return topology.nodes.some((n) => n.data.statusBinding)
+  // Saúde da consulta. Nada aqui é confiável quando a query falha ou não
+  // devolve nada — e nesse caso o mapa fica CINZA, nunca vermelho: erro de
+  // datasource não é queda de rede, e afirmar que é assusta o plantão à toa.
+  //
+  // O caso 'error' é o que morde na prática: com período longo e refresh curto
+  // a consulta ao Zabbix estoura de vez em quando; parte das séries não chega,
+  // as métricas viram "sem coleta" e a regra de queda pintaria o mapa inteiro
+  // de vermelho. Uma falha parcial já basta para desconfiar do resto.
+  const dataHealth: 'ok' | 'error' | 'empty' = useMemo(() => {
+    const failed = data?.state === LoadingState.Error
+      || !!(data as any)?.error
+      || ((data as any)?.errors?.length ?? 0) > 0;
+    if (failed) return 'error';
+    if (series.length > 0) return 'ok';
+    // Mapa recém-criado, sem binding nenhum, não está "sem dados": está vazio.
+    const esperaDados = topology.nodes.some((n) => n.data.statusBinding)
       || topology.edges.some((e) =>
         e.data.sourceStatusBinding || e.data.targetStatusBinding || e.data.statusBinding
         || e.data.trafficUpBinding || e.data.sourceTrafficUpBinding || e.data.targetTrafficUpBinding);
-  }, [series, topology]);
+    return esperaDados ? 'empty' : 'ok';
+  }, [data, series, topology]);
+
+  const noData = dataHealth !== 'ok';
 
   // Status ao vivo de CADA nó, calculado uma única vez por refresh e
   // compartilhado entre os memos de nós e de arestas (nó down → links down).
@@ -421,9 +433,13 @@ export const TopologyPanel: React.FC<Props> = (props) => {
       });
       let edgeStatus: LinkStatus = outcome.status;
 
-      // Regras cosméticas: pintam o que não está down. Um link com os dois
-      // lados caídos não pode voltar a verde por mapeamento — status estrutural
-      // ganha de cor configurada.
+      // Regras cosméticas: PINTAM e nada mais. Elas não decidem se o link está
+      // no ar — antes, uma regra que casasse marcava o link como 'up' junto com
+      // a cor, então um link pintado de vermelho pela regra reportava UP no
+      // modal, sem causa no hover e sem a aparência de DOWN. A imagem dizia uma
+      // coisa e o dado dizia outra. E vale pra qualquer métrica: quem mapeia
+      // temperatura ou nível de sinal não deve ganhar link "no ar" de brinde.
+      // Não pintam link down: queda precisa ser inconfundível.
       if (legacyIsCosmetic && edgeStatus !== 'down') {
         const r = resolveBindingDetailed(series, e.data.statusBinding);
         if (r.state === 'ok') {
@@ -435,9 +451,6 @@ export const TopologyPanel: React.FC<Props> = (props) => {
             edgeColor = matched.color;
             edgeAnim = matched.animation ?? 'none';
             if (matched.lineStyle) edgeLineStyle = matched.lineStyle; // traçado por regra
-            edgeStatus = 'up';
-          } else {
-            edgeStatus = 'unknown'; // valor resolvido mas sem regra correspondente
           }
         }
       }
@@ -546,7 +559,8 @@ export const TopologyPanel: React.FC<Props> = (props) => {
           initialNodes={initialNodes}
           initialEdges={initialEdges}
           topology={topology}
-          noData={noData}
+          noData={dataHealth !== 'ok'}
+          dataHealth={dataHealth}
           onOpenTest={(target) => setTestTarget(target)}
         />
         {!options.editMode && (
@@ -578,12 +592,14 @@ interface InnerProps extends Props {
   topology: NetworkTopology;
   /** Datasource não respondeu: mapa inteiro cinza + tarja de aviso */
   noData: boolean;
+  /** 'error' = a query falhou (tarja diferente de "sem dados") */
+  dataHealth: 'ok' | 'error' | 'empty';
   /** Abre o modal de testes de rede com um alvo inicial ('' = vazio) */
   onOpenTest: (target: string) => void;
 }
 
 const TopologyInner: React.FC<InnerProps> = ({
-  initialNodes, initialEdges, topology, options, width, height, onOptionsChange, data, onOpenTest, noData,
+  initialNodes, initialEdges, topology, options, width, height, onOptionsChange, data, onOpenTest, noData, dataHealth,
 }) => {
   const seriesKeys = useMemo(() => listSeriesKeys(data?.series ?? []), [data?.series]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -1067,7 +1083,7 @@ const TopologyInner: React.FC<InnerProps> = ({
         {/* Sem a tarja, o mapa todo cinza é ambíguo: cinza também significa
             "não configurado", então o plantão leria "mapa mal montado" em vez
             de "estou cego agora" — reações opostas no pior momento. */}
-        {noData && (
+        {dataHealth !== 'ok' && (
           <div style={{
             position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
             zIndex: 12, display: 'flex', alignItems: 'center', gap: 8,
@@ -1077,7 +1093,9 @@ const TopologyInner: React.FC<InnerProps> = ({
             boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
           }}>
             <span style={{ fontSize: 14 }}>⚠️</span>
-            Sem dados do datasource — o mapa não reflete o estado atual da rede
+            {dataHealth === 'error'
+              ? 'A consulta ao datasource falhou — mapa cinza por precaução, não é queda de rede'
+              : 'Sem dados do datasource — o mapa não reflete o estado atual da rede'}
           </div>
         )}
         {topology.nodes.length === 0 && (
