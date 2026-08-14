@@ -79,9 +79,17 @@ export function classify(key: string): MetricType | null {
   return null;
 }
 
-/** Extrai host e interface de um nome de série (4 gramáticas, tolerante). */
-export function parseHostIface(key: string): { host?: string; iface?: string } {
-  let rest = key;
+/** Separador usado por haystack() em dataBinding.ts para unir as partes de uma
+ *  série (frame.name, field.name, displayNameFromDS, labels). */
+const HAYSTACK_SEP = ' • ';
+
+/** Host exposto como label pelo datasource ("host=RTR-01"), e não como prefixo
+ *  do nome. Nesse modo o nome do item vem sem o "HOST: " na frente. */
+const HOST_LABEL_RE = /^\s*(?:host|hostname|host_name)\s*=\s*(.+?)\s*$/i;
+
+/** Aplica as 4 gramáticas a UM segmento já isolado. */
+function parseSegment(seg: string): { host?: string; iface?: string } {
+  let rest = seg;
   let host: string | undefined;
 
   // Prefixo de host: "HOST: ..." — guarda contra iface no lugar (iface tem '/')
@@ -104,6 +112,39 @@ export function parseHostIface(key: string): { host?: string; iface?: string } {
   if (m) return { host, iface: m[1] };
 
   return { host };
+}
+
+/** Extrai host e interface de uma chave de série.
+ *
+ *  A chave que chega aqui NÃO é o nome cru do item: é o haystack montado por
+ *  dataBinding.ts, que concatena frame.name, field.name, displayNameFromDS e os
+ *  labels com " • ". O nome de verdade nem sempre é o primeiro segmento — em
+ *  datasources que nomeiam o campo de "Value" e jogam o nome completo em
+ *  displayNameFromDS, a chave começa com "Value • ...". Como as gramáticas são
+ *  ancoradas em ^, testar só a string inteira perdia esses casos por completo
+ *  (nenhuma interface detectada). Por isso cada segmento é testado. */
+export function parseHostIface(key: string): { host?: string; iface?: string } {
+  const segments = key.split(HAYSTACK_SEP);
+  let host: string | undefined;
+  let iface: string | undefined;
+
+  // Host como label tem prioridade: é o valor explícito do datasource
+  for (const seg of segments) {
+    const m = seg.match(HOST_LABEL_RE);
+    if (m) {
+      host = m[1];
+      break;
+    }
+  }
+
+  for (const seg of segments) {
+    const r = parseSegment(seg);
+    if (!host && r.host) host = r.host;
+    if (!iface && r.iface) iface = r.iface;
+    if (host && iface) break;
+  }
+
+  return { host, iface };
 }
 
 export interface DiscoveredInterface {
