@@ -102,6 +102,12 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
   const { editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, openLinkDetails, hoverLink, unhoverLink } = useEditor();
   const { screenToFlowPosition } = useReactFlow();
 
+  // Quais cards exibir. Esconder é só visual — antes, a única forma de ocultar
+  // um card era apagar o nome da interface, o que levava o cadastro junto.
+  const cardsSide = data?.cardsSide ?? 'both';
+  const showSourceCard = cardsSide === 'both' || cardsSide === 'source';
+  const showTargetCard = cardsSide === 'both' || cardsSide === 'target';
+
   const [localWp, setLocalWp] = useState<Pt[]>(data?.waypoints ?? []);
   const [localSrcA, setLocalSrcA] = useState<Pt | undefined>(data?.sourceAnchor);
   const [localTgtA, setLocalTgtA] = useState<Pt | undefined>(data?.targetAnchor);
@@ -503,7 +509,7 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
           </>
         )}
 
-        {data?.sourceInterface && (
+        {data?.sourceInterface && showSourceCard && (
           <IfLabel
             text={data.sourceInterface}
             ip={data.showIp ? data.sourceIp : undefined}
@@ -530,7 +536,7 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             rxLevel={srcRxLevel}
           />
         )}
-        {data?.targetInterface && (
+        {data?.targetInterface && showTargetCard && (
           <IfLabel
             text={data.targetInterface}
             ip={data.showIp ? data.targetIp : undefined}

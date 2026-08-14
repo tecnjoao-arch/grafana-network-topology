@@ -277,13 +277,13 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         position: n.position,
         // fontScale injetado: o DeviceNode usa pra escalar ícone e badge (px fixos)
         data: {
-          ...n.data, status, color, searchQuery,
+          ...n.data, status, color, searchQuery, showIp,
           statusCause: cause, statusDetail: detail,
           fontScale: options.fontScale ?? 1,
         } as any,
       };
     }),
-    [topology, nodeLive, searchQuery, options.fontScale]
+    [topology, nodeLive, searchQuery, options.fontScale, showIp]
   );
 
   // Arestas: aplica binding de up/down/speed e IP das séries
@@ -545,6 +545,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
           initialNodes={initialNodes}
           initialEdges={initialEdges}
           topology={topology}
+          noData={noData}
           onOpenTest={(target) => setTestTarget(target)}
         />
         {!options.editMode && (
@@ -574,12 +575,14 @@ interface InnerProps extends Props {
   initialNodes: Node[];
   initialEdges: Edge[];
   topology: NetworkTopology;
+  /** Datasource não respondeu: mapa inteiro cinza + tarja de aviso */
+  noData: boolean;
   /** Abre o modal de testes de rede com um alvo inicial ('' = vazio) */
   onOpenTest: (target: string) => void;
 }
 
 const TopologyInner: React.FC<InnerProps> = ({
-  initialNodes, initialEdges, topology, options, width, height, onOptionsChange, data, onOpenTest,
+  initialNodes, initialEdges, topology, options, width, height, onOptionsChange, data, onOpenTest, noData,
 }) => {
   const seriesKeys = useMemo(() => listSeriesKeys(data?.series ?? []), [data?.series]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -1060,6 +1063,22 @@ const TopologyInner: React.FC<InnerProps> = ({
           />
         )}
         {options.editMode && <EditModeBanner onAddNode={addNode} />}
+        {/* Sem a tarja, o mapa todo cinza é ambíguo: cinza também significa
+            "não configurado", então o plantão leria "mapa mal montado" em vez
+            de "estou cego agora" — reações opostas no pior momento. */}
+        {noData && (
+          <div style={{
+            position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 12, display: 'flex', alignItems: 'center', gap: 8,
+            background: 'rgba(120, 53, 15, 0.95)', border: '1px solid #f59e0b',
+            color: '#fde68a', padding: '6px 14px', borderRadius: 6,
+            fontSize: 12, fontWeight: 600, pointerEvents: 'none',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+          }}>
+            <span style={{ fontSize: 14 }}>⚠️</span>
+            Sem dados do datasource — o mapa não reflete o estado atual da rede
+          </div>
+        )}
         {topology.nodes.length === 0 && (
           <div style={{
             position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',

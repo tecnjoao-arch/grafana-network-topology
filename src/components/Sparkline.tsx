@@ -47,10 +47,10 @@ export const Sparkline: React.FC<{
           </g>
         );
       })}
-      {outbound && <path d={area(outbound)} fill="rgba(59,130,246,0.18)" />}
+      {/* Mesma leitura do modal: só o inbound preenchido, outbound só linha. */}
       {inbound && <path d={area(inbound)} fill="rgba(34,197,94,0.18)" />}
-      {outbound && <path d={line(outbound)} fill="none" stroke="#3b82f6" strokeWidth={1.3} vectorEffect="non-scaling-stroke" />}
-      {inbound && <path d={line(inbound)} fill="none" stroke="#22c55e" strokeWidth={1.3} vectorEffect="non-scaling-stroke" />}
+      {inbound && <path d={line(inbound)} fill="none" stroke="#22c55e" strokeWidth={2.2} vectorEffect="non-scaling-stroke" />}
+      {outbound && <path d={line(outbound)} fill="none" stroke="#3b82f6" strokeWidth={2.2} vectorEffect="non-scaling-stroke" />}
     </svg>
   );
 };

@@ -64,11 +64,51 @@ export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
       })
       .addBooleanSwitch({
         path: 'dimLinksOnNodeDown',
-        name: 'Apagar links de nós down',
+        name: 'Nó down derruba os links',
         description:
-          'Quando um equipamento fica down (pelo binding de status/ping), os links ' +
-          'ligados a ele ficam apagados — a leitura vira "o problema é o nó".',
+          'Equipamento down (pelo binding de status/ping) derruba os links ligados ' +
+          'a ele, com a causa "equipamento sem resposta". Desligue se preferir que ' +
+          'cada link dependa só do próprio operStatus.',
         defaultValue: DEFAULT_OPTIONS.dimLinksOnNodeDown,
+        category: ['Visual'],
+      })
+      .addColorPicker({
+        path: 'downColor',
+        name: 'Cor do link DOWN',
+        description: 'Vale para o mapa inteiro; cada link pode sobrescrever no editor.',
+        defaultValue: DEFAULT_OPTIONS.downColor,
+        category: ['Visual'],
+      })
+      .addSelect({
+        path: 'downLineStyle',
+        name: 'Traçado do link DOWN',
+        defaultValue: DEFAULT_OPTIONS.downLineStyle,
+        settings: {
+          options: [
+            { value: 'solid', label: 'Sólido' },
+            { value: 'dashed', label: 'Tracejado' },
+            { value: 'dotted', label: 'Pontilhado' },
+            { value: 'double', label: 'Duplo' },
+          ],
+        },
+        category: ['Visual'],
+      })
+      .addSelect({
+        path: 'downAnimation',
+        name: 'Animação do link DOWN',
+        description:
+          'Pulsar/brilhar chamam atenção sem simular movimento. Fluxo e fluxo reverso ' +
+          'imitam bits andando — num link caído passam a impressão de tráfego passando.',
+        defaultValue: DEFAULT_OPTIONS.downAnimation,
+        settings: {
+          options: [
+            { value: 'pulse', label: 'Pulsar (recomendado)' },
+            { value: 'glow', label: 'Brilhar' },
+            { value: 'none', label: 'Nenhuma' },
+            { value: 'flow', label: 'Fluxo (simula tráfego)' },
+            { value: 'reverse', label: 'Fluxo reverso (simula tráfego)' },
+          ],
+        },
         category: ['Visual'],
       })
       .addNumberInput({

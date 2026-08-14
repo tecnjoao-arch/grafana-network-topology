@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import {
   LinkEdgeData, LineStyle, LineAnimation, LINE_STYLES, LINE_ANIMATIONS,
   PathType, PATH_TYPES, LabelFooter, LABEL_FOOTERS,
-  OPTIC_KEYS, OpticKey, ModuleInfoBindings,
+  OPTIC_KEYS, OpticKey, ModuleInfoBindings, CardsSide,
 } from '../types';
 import { MetricBinding, Aggregation } from '../utils/dataBinding';
 import { discoverInterfaces, discoveryReport, DiscoveredInterface } from '../utils/discovery';
@@ -139,7 +139,17 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
     }
 
     if (m.speed) patch.speedBinding = bind(m.speed);
-    if (m.status) patch.statusBinding = bind(m.status);
+    // Status vai para o binding DO LADO preenchido — é o que permite exigir que
+    // as duas pontas concordem. E já fixa a regra do ifOperStatus (1=up, 2=down):
+    // no operador padrão '>' 0, o valor 2 seria lido como UP, ou seja, interface
+    // caída apareceria verde.
+    if (m.status) {
+      patch[side === 'source' ? 'sourceStatusBinding' : 'targetStatusBinding'] = bind(m.status);
+      if (data.statusOperator === undefined) {
+        patch.statusOperator = '==';
+        patch.statusValue = 1;
+      }
+    }
     onChange(patch);
   };
 
@@ -175,6 +185,8 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
       | 'sourceErrorBinding'
       | 'targetErrorBinding'
       | 'statusBinding'
+      | 'sourceStatusBinding'
+      | 'targetStatusBinding'
       | 'sourceDomTempBinding'
       | 'sourceDomVoltBinding'
       | 'sourceDomBiasBinding'
@@ -448,6 +460,25 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
             onChange={(e) => onChange({ targetInterface: e.target.value })}
             style={{ ...inputText, width: '100%' }}
           />
+
+          <div style={{ marginTop: 10, fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
+            Cards no link
+          </div>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {([
+              ['both', 'Ambos'],
+              ['source', `Só ${sourceLabel}`],
+              ['target', `Só ${targetLabel}`],
+              ['none', 'Nenhum'],
+            ] as Array<[CardsSide, string]>).map(([v, txt]) => (
+              <Chip key={v} active={(data.cardsSide ?? 'both') === v} onClick={() => onChange({ cardsSide: v })}>
+                {txt}
+              </Chip>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
+            Só esconde o card — bindings e nome da interface continuam salvos.
+          </div>
           {(data.sourceLabelOffset || data.targetLabelOffset) && (
             <button
               onClick={() => onChange({ sourceLabelOffset: undefined, targetLabelOffset: undefined })}
@@ -479,6 +510,51 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
           </div>
           <div style={{ fontSize: 10, color: '#64748b', marginTop: 6 }}>
             "Fibra" usa os bindings de Potência Tx/Rx DOM de cada lado (seção 🧬 abaixo).
+          </div>
+        </Section>
+
+        {/* Status operacional — os dois lados */}
+        <Section title="Status Operacional (ifOperStatus)">
+          <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8 }}>
+            O link só fica verde se <b>todos</b> os lados preenchidos estiverem up.
+            Um lado down, sem coleta ou com série sumida derruba o link.
+          </div>
+          <BindRow
+            label={`🅰 Status — ${sourceLabel}`}
+            binding={data.sourceStatusBinding}
+            seriesKeys={seriesKeys}
+            onMatch={(m) => patchBinding('sourceStatusBinding', { match: m })}
+            onAgg={(a) => patchBinding('sourceStatusBinding', { aggregation: a })}
+          />
+          <div style={{ height: 6 }} />
+          <BindRow
+            label={`🅱 Status — ${targetLabel}`}
+            binding={data.targetStatusBinding}
+            seriesKeys={seriesKeys}
+            onMatch={(m) => patchBinding('targetStatusBinding', { match: m })}
+            onAgg={(a) => patchBinding('targetStatusBinding', { aggregation: a })}
+          />
+
+          <div style={{ marginTop: 10, fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
+            Regra de leitura
+          </div>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <Chip
+              active={data.statusOperator === '==' && data.statusValue === 1}
+              onClick={() => onChange({ statusOperator: '==', statusValue: 1 })}
+            >
+              ifOperStatus Zabbix (1=up)
+            </Chip>
+            <Chip
+              active={data.statusOperator === '>' && (data.statusValue ?? 0) === 0}
+              onClick={() => onChange({ statusOperator: '>', statusValue: 0 })}
+            >
+              ICMP ping (1=ok)
+            </Chip>
+          </div>
+          <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 6 }}>
+            ⚠ Com "maior que 0", o ifOperStatus <b>2 (down)</b> é lido como up — a
+            interface caída ficaria verde. Use o preset do Zabbix nesse caso.
           </div>
         </Section>
 

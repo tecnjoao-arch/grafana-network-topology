@@ -84,6 +84,13 @@ export const LinkTooltip: React.FC<Props> = ({ data, sourceLabel, targetLabel, s
           <span style={{ fontSize: 11.5, color: '#22d3ee', fontFamily: 'monospace' }}>{s.iface ?? '—'}</span>
         </div>
         <div style={{ fontSize: 9.5, color: '#64748b', marginTop: 2 }}>↔ {s.other}</div>
+        {/* Por que está nessa cor. "Sem coleta" e "série não encontrada" pedem
+            reações opostas — sem o motivo, o operador só vê vermelho. */}
+        {data.statusDetail && (
+          <div style={{ fontSize: 10, color: statusColor, marginTop: 4, fontWeight: 600 }}>
+            {data.statusDetail}
+          </div>
+        )}
       </div>
 
       <div style={{ padding: 8 }}>

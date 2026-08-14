@@ -25,7 +25,7 @@ function isSafeUrl(url: string): boolean {
 }
 
 export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
-  const { label, ip, deviceType, status, customIcon, color, iconSize, searchQuery, nodeWidth, nodeHeight, borderRadius, bgColor, linkUrl } = data as any;
+  const { label, ip, deviceType, status, customIcon, color, iconSize, searchQuery, nodeWidth, nodeHeight, borderRadius, bgColor, linkUrl, showIp, statusDetail } = data as any;
   // Escala da fonte do painel (opção "Escala da fonte" p/ TV de NOC):
   // textos escalam via em; ícone e badge usam px e precisam multiplicar.
   const fontScale = (data as any).fontScale ?? 1;
@@ -94,6 +94,10 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
       onClick={handleNodeClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      // Por que está nessa cor: "sem coleta há 12 min" e "série não encontrada"
+      // exigem reações opostas (técnico vs revisar binding) e sem isso o
+      // operador só vê vermelho.
+      title={statusDetail || undefined}
       style={{
         opacity: nodeOpacity,
         display: 'flex',
@@ -210,7 +214,10 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
       >
         {label}
       </div>
-      {ip && (
+      {/* Obedece ao mesmo toggle de IP dos cards de link: antes o botão da
+          barra escondia só os cards e o IP do nó continuava exposto — meio
+          toggle não serve pra apresentar o mapa em tela pública. */}
+      {ip && showIp !== false && (
         <div
           onClick={handleCopy}
           title="Clique para copiar o IP"

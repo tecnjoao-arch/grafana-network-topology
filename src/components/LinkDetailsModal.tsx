@@ -372,10 +372,12 @@ const TrafficChart: React.FC<{ inbound?: BindingSeries; outbound?: BindingSeries
             </g>
           ))}
           {/* Áreas + linhas (verde inbound ao fundo, azul outbound por cima) */}
+          {/* Só o inbound recebe preenchimento: com as duas áreas pintadas as
+              curvas se embolavam. Sem fill, a linha do outbound corre POR CIMA
+              da área verde e as duas leituras ficam separáveis num relance. */}
           {inbound && <path d={area(inbound)} fill="rgba(34,197,94,0.25)" />}
-          {outbound && <path d={area(outbound)} fill="rgba(59,130,246,0.16)" />}
-          {inbound && <path d={line(inbound)} fill="none" stroke={IN_COLOR} strokeWidth={1.5} />}
-          {outbound && <path d={line(outbound)} fill="none" stroke={OUT_COLOR} strokeWidth={1.5} />}
+          {inbound && <path d={line(inbound)} fill="none" stroke={IN_COLOR} strokeWidth={3} />}
+          {outbound && <path d={line(outbound)} fill="none" stroke={OUT_COLOR} strokeWidth={3} />}
           {speedFits && (
             <line x1={PL} x2={W - PR} y1={py(speed!)} y2={py(speed!)} stroke="#94a3b8" strokeWidth={1} strokeDasharray="6 5" />
           )}
