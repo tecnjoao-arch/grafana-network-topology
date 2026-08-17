@@ -12,6 +12,7 @@
 //   3) "<iface> - <métrica>"                   → DOM (templates antigos)
 //   4) "<iface>: <métrica>"                    → info do módulo (Media Type etc)
 
+import { stableMatch, SEP } from './dataBinding';
 export type MetricType =
   // Tráfego e estado
   | 'inbound' | 'outbound' | 'speed' | 'errors' | 'discards' | 'ip' | 'status'
@@ -81,7 +82,7 @@ export function classify(key: string): MetricType | null {
 
 /** Separador usado por haystack() em dataBinding.ts para unir as partes de uma
  *  série (frame.name, field.name, displayNameFromDS, labels). */
-const HAYSTACK_SEP = ' • ';
+const HAYSTACK_SEP = SEP;
 
 /** Host exposto como label pelo datasource ("host=RTR-01"), e não como prefixo
  *  do nome. Nesse modo o nome do item vem sem o "HOST: " na frente. */
@@ -187,7 +188,10 @@ export function discoverInterfaces(seriesKeys: string[]): DiscoveredInterface[] 
       g = { id: gk, host, iface, label: host ? `${host} · ${iface}` : iface, metrics: {} };
       groups.set(gk, g);
     }
-    if (!g.metrics[type]) g.metrics[type] = key; // primeiro a casar vence
+    // Guarda o segmento distintivo, não o identificador inteiro: a composição
+    // do identificador muda conforme o formato que o datasource devolve, e um
+    // binding preso a um formato para de casar quando o outro volta.
+    if (!g.metrics[type]) g.metrics[type] = stableMatch(key); // primeiro a casar vence
   }
 
   // Mescla grupos sem host no grupo com host de mesma interface, se for único
@@ -219,8 +223,8 @@ export function discoverHosts(seriesKeys: string[]): DiscoveredHost[] {
     }
     if (iface) h.ifaces.add(iface);
     const t = classify(key);
-    if (t === 'ip' && !h.ipKey) h.ipKey = key;
-    if (t === 'status' && !h.statusKey) h.statusKey = key;
+    if (t === 'ip' && !h.ipKey) h.ipKey = stableMatch(key);
+    if (t === 'status' && !h.statusKey) h.statusKey = stableMatch(key);
   }
   return [...hosts.values()]
     .map((h) => ({ host: h.host, ifaceCount: h.ifaces.size, ipKey: h.ipKey, statusKey: h.statusKey }))

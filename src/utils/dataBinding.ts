@@ -35,6 +35,34 @@ export interface BindingSeries {
   values: number[];
 }
 
+/** Separador entre as partes que formam o identificador de uma série. */
+export const SEP = ' • ';
+
+/** Partes genéricas do identificador: existem em qualquer série e não servem
+ *  para distinguir uma da outra ('wide' é o nome que o frame ganha quando o
+ *  datasource devolve no formato de tabela larga). */
+const GENERIC_PART = /^(wide|long|value|values|time|series|metric|field|__\w+)$/i;
+
+/** Reduz um identificador de série ao pedaço mais distintivo dele.
+ *
+ *  O MESMO item do Zabbix chega com identificadores diferentes conforme o
+ *  formato que o datasource resolve usar:
+ *    formato A:  "ASR9K-PUC: ICMP ping • Value"
+ *    formato B:  "wide • ASR9K-PUC: ICMP ping • ASR9K-PUC: ICMP ping •
+ *                 host=ASR9K-PUC • ASR9K-PUC • item=ICMP ping • ..."
+ *  Gravar a string inteira amarra o binding a UM formato — quando o outro volta,
+ *  nada casa e o mapa inteiro vira "série não encontrada". Como os dois contêm
+ *  o segmento "ASR9K-PUC: ICMP ping", é ELE que deve ser guardado e casado.
+ *
+ *  Descarta partes genéricas e rótulos "chave=valor", e fica com o segmento
+ *  mais longo — o mais específico. */
+export function stableMatch(key: string): string {
+  const parts = key.split(SEP).map((s) => s.trim()).filter(Boolean);
+  const candidatos = parts.filter((p) => !GENERIC_PART.test(p) && !/^[\w.]+=/.test(p));
+  if (candidatos.length === 0) return key.trim();
+  return candidatos.reduce((a, b) => (b.length > a.length ? b : a));
+}
+
 /** Constrói uma string "pesquisável" que identifica uma série/campo. */
 function haystack(frame: DataFrame, field: Field): string {
   const parts: string[] = [];
@@ -46,7 +74,7 @@ function haystack(frame: DataFrame, field: Field): string {
   if (labels) {
     for (const k of Object.keys(labels)) parts.push(`${k}=${labels[k]}`, String(labels[k]));
   }
-  return parts.join(' • ');
+  return parts.join(SEP);
 }
 
 function reduce(values: number[], agg: Aggregation): number | undefined {
@@ -67,6 +95,9 @@ function reduce(values: number[], agg: Aggregation): number | undefined {
 interface IndexedField {
   hay: string;
   hayLower: string;
+  /** Pedaços do hay separados por SEP, em minúsculas — usados no casamento
+   *  por segmento exato, que sobrevive a mudança de formato do datasource. */
+  segments: string[];
   refId: string;
   isNumber: boolean;
   field: Field;
@@ -103,6 +134,7 @@ function getIndex(series: DataFrame[]): SeriesIndex {
       fields.push({
         hay,
         hayLower: hay.toLowerCase(),
+        segments: hay.split(SEP).map((s) => s.trim().toLowerCase()).filter(Boolean),
         refId: frame.refId ?? '',
         isNumber: field.type === 'number',
         field,
@@ -126,7 +158,17 @@ function makeMatcher(match: string): (f: IndexedField) => boolean {
     re = null; // match inválido como regex → só substring
   }
   const lowerMatch = match.toLowerCase();
-  return (f) => f.hayLower.includes(lowerMatch) || (re ? re.test(f.hay) : false);
+  const stable = stableMatch(match).toLowerCase();
+  // Rede de segurança: quando o texto salvo é o identificador INTEIRO de um
+  // formato e o datasource passa a devolver o outro, o casamento literal falha
+  // em tudo de uma vez. Aí vale o segmento distintivo — comparado por igualdade
+  // EXATA de segmento (não substring), pra "HOST: ICMP ping" nunca casar com
+  // "HOST: ICMP ping loss".
+  const usaSegmento = stable !== lowerMatch;
+  return (f) =>
+    f.hayLower.includes(lowerMatch)
+    || (re ? re.test(f.hay) : false)
+    || (usaSegmento && f.segments.includes(stable));
 }
 
 /** Lista identificadores legíveis de todas as séries (números e texto). */

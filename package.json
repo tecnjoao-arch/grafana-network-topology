@@ -1,6 +1,6 @@
 {
   "name": "grafana-network-topology",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Plugin de topologia de rede para Grafana com binding dinâmico a métricas",
   "scripts": {
     "typecheck": "tsc --noEmit",
