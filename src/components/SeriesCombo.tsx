@@ -2,7 +2,8 @@
 // Substitui o <datalist> nativo, que cortava os nomes longos do Zabbix (a parte
 // que diferencia os itens fica no final) e não tinha barra de rolagem.
 
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
+import { stableMatch } from '../utils/dataBinding';
 
 export const SeriesCombo: React.FC<{
   value: string;
@@ -21,8 +22,30 @@ export const SeriesCombo: React.FC<{
     setOpen(true);
   };
 
+  // A lista mostra (e grava) o pedaço distintivo, não o identificador inteiro.
+  // O identificador completo muda de composição conforme o formato que o
+  // datasource devolve; gravar ele inteiro amarra o binding a um formato e ele
+  // para de casar quando o outro volta. Duas entradas com o mesmo pedaço são o
+  // mesmo item repetido pelo datasource — viram uma linha só, e a lista deixa
+  // de ter milhares de nomes gigantes e ilegíveis.
+  const options = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ label: string; full: string }> = [];
+    for (const k of seriesKeys) {
+      const label = stableMatch(k);
+      if (!label || seen.has(label)) continue;
+      seen.add(label);
+      out.push({ label, full: k });
+    }
+    return out;
+  }, [seriesKeys]);
+
   const q = value.trim().toLowerCase();
-  const filtered = q ? seriesKeys.filter((k) => k.toLowerCase().includes(q)) : seriesKeys;
+  // Busca tolerante: casa pelo que está à mostra ou pelo identificador cru
+  // (permite procurar por label, ex: "host=RTR1").
+  const filtered = q
+    ? options.filter((o) => o.label.toLowerCase().includes(q) || o.full.toLowerCase().includes(q))
+    : options;
   const width = Math.min(480, (typeof window !== 'undefined' ? window.innerWidth : 480) - 24);
   const left = anchor ? Math.max(8, anchor.right - width) : 0;
 
@@ -42,19 +65,20 @@ export const SeriesCombo: React.FC<{
       {open && anchor && filtered.length > 0 && (
         // position:fixed escapa do overflow do painel do editor (que tem scroll próprio)
         <div style={{ ...dropdownStyle, top: anchor.top, left, width }}>
-          {filtered.slice(0, 150).map((k, i) => (
+          {filtered.slice(0, 150).map((o, i) => (
             <div
               key={i}
               // mousedown (não click): dispara antes do blur do input fechar a lista
-              onMouseDown={(e) => { e.preventDefault(); onChange(k); setOpen(false); }}
+              onMouseDown={(e) => { e.preventDefault(); onChange(o.label); setOpen(false); }}
               onMouseEnter={() => setHoverIdx(i)}
+              title={o.full}
               style={{
                 ...itemStyle,
                 background: hoverIdx === i ? '#1d4ed8' : 'transparent',
                 color: hoverIdx === i ? '#fff' : '#cbd5e1',
               }}
             >
-              {k}
+              {o.label}
             </div>
           ))}
           {filtered.length > 150 && (
