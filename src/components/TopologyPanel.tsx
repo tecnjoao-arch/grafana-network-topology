@@ -28,7 +28,7 @@ import {
   resolveBinding, resolveTextBinding, listSeriesKeys, setStaleThresholdMs,
   resolveBindingDetailed,
 } from '../utils/dataBinding';
-import { resolveNodeStatus, resolveLinkStatus, NodeLiveStatus, SideStatus } from '../utils/status';
+import { resolveNodeStatus, resolveLinkStatus, dampStatus, NodeLiveStatus, FlapState, SideStatus } from '../utils/status';
 
 // Gera ids únicos e estáveis dentro do processo. Date.now() sozinho colide
 // quando o usuário duplica/cola vários nós no mesmo milissegundo.
@@ -264,13 +264,45 @@ export const TopologyPanel: React.FC<Props> = (props) => {
 
   const noData = dataHealth !== 'ok';
 
+  // ── Amortecimento de piscada ────────────────────────────────────────────
+  // Ping perdido, coleta atrasada e resposta parcial do datasource somem no
+  // ciclo seguinte, mas cada um deles pinta o mapa de vermelho por um instante
+  // — e um nó piscando arrasta todos os links dele junto. Só confirma a queda
+  // depois de N ciclos seguidos falhando; a RECUPERAÇÃO continua imediata,
+  // porque ninguém quer esperar pra saber que voltou.
+  const dampRef = useRef<{
+    seen: DataFrame[] | null;
+    st: Map<string, FlapState>;
+  }>({ seen: null, st: new Map() });
+
+  // true exatamente uma vez por chegada de dados. Se o memo recalcular por
+  // outro motivo (edição, hover), `seen` já é a mesma referência e o contador
+  // não avança — senão editar o mapa "confirmaria" quedas sozinho.
+  const dataAdvanced = useMemo(() => {
+    const changed = dampRef.current.seen !== series;
+    dampRef.current.seen = series;
+    return changed;
+  }, [series]);
+
+  const confirmCycles = Math.max(1, options.downConfirmCycles ?? DEFAULT_OPTIONS.downConfirmCycles);
+
+  const damp = useCallback(
+    <T extends NodeLiveStatus>(id: string, cur: T): T => {
+      const m = dampRef.current.st;
+      const { shown, next } = dampStatus(m.get(id), cur, confirmCycles, dataAdvanced);
+      if (dataAdvanced) m.set(id, next);
+      return shown;
+    },
+    [confirmCycles, dataAdvanced]
+  );
+
   // Status ao vivo de CADA nó, calculado uma única vez por refresh e
   // compartilhado entre os memos de nós e de arestas (nó down → links down).
   const nodeLive = useMemo(() => {
     const m = new Map<string, NodeLiveStatus>();
-    for (const n of topology.nodes) m.set(n.id, resolveNodeStatus(n.data, series, noData));
+    for (const n of topology.nodes) m.set(n.id, damp(n.id, resolveNodeStatus(n.data, series, noData)));
     return m;
-  }, [topology, series, noData]);
+  }, [topology, series, noData, damp]);
 
   // Nome legível de cada nó — usado nas mensagens de causa ("RTR-01 sem resposta")
   const nodeLabels = useMemo(() => {
@@ -423,14 +455,17 @@ export const TopologyPanel: React.FC<Props> = (props) => {
           : nodeLive.get(e.target)?.status === 'down' ? nodeLabels.get(e.target) : undefined)
         : undefined;
 
-      const outcome = resolveLinkStatus({
+      // Amortecido pelo mesmo critério dos nós. Os links cujo vermelho vem do
+      // equipamento já herdam a estabilidade dele (o nó segura a queda), mas o
+      // operStatus do próprio link também pode piscar sozinho.
+      const outcome = damp(e.id, resolveLinkStatus({
         noData,
         endpointDown: downEndpoint,
         sides,
         operator: e.data.statusOperator,
         value: e.data.statusValue,
         freshTraffic,
-      });
+      }));
       let edgeStatus: LinkStatus = outcome.status;
 
       // Regras cosméticas: PINTAM e nada mais. Elas não decidem se o link está
@@ -539,7 +574,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
       };
     }),
     [topology, series, showIp, searchQuery, hideTrafficCards, options.fontScale, nodeLive,
-      options.dimLinksOnNodeDown, noData, nodeLabels,
+      options.dimLinksOnNodeDown, noData, nodeLabels, damp,
       options.downColor, options.downLineStyle, options.downAnimation]
   );
 

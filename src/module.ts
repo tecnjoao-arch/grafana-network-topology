@@ -123,6 +123,18 @@ export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
         category: ['Visual'],
       })
       .addNumberInput({
+        path: 'downConfirmCycles',
+        name: 'Ciclos para confirmar queda',
+        description:
+          'Quantas atualizações seguidas uma métrica precisa falhar antes do mapa ' +
+          'pintar de vermelho. Ping perdido, coleta atrasada e resposta parcial do ' +
+          'datasource somem no ciclo seguinte — sem isso cada um pisca o mapa à toa. ' +
+          'A recuperação continua imediata. 1 desativa (queda aparece na hora).',
+        defaultValue: DEFAULT_OPTIONS.downConfirmCycles,
+        settings: { min: 1, max: 10, step: 1 },
+        category: ['Dados'],
+      })
+      .addNumberInput({
         path: 'staleThresholdSec',
         name: 'Limite de obsolescência (s)',
         description:

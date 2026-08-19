@@ -341,6 +341,10 @@ export interface PanelOptions {
   /** Abrevia o IPv6 nos cards ("2804:1f18…:14") para eles não ficarem largos
    *  demais e se sobreporem. Endereço completo continua no modal e ao copiar. */
   shortenIpv6: boolean;
+  /** Ciclos seguidos de falha antes de pintar de vermelho (1 = imediato).
+   *  Ping perdido, coleta atrasada e resposta parcial do datasource somem no
+   *  ciclo seguinte — sem isso, cada um deles pisca o mapa à toa. */
+  downConfirmCycles: number;
   /** Token do Globalping (opcional): aumenta a cota dos testes de rede.
    *  Atenção: fica visível no JSON do dashboard (risco baixo — só controla cota). */
   globalpingToken?: string;
@@ -366,6 +370,7 @@ export const DEFAULT_OPTIONS: PanelOptions = {
   downLineStyle: 'solid',
   downAnimation: 'pulse',
   shortenIpv6: true,
+  downConfirmCycles: 3,
   globalpingToken: '',
 };
 

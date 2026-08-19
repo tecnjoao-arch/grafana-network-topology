@@ -96,6 +96,44 @@ export function resolveNodeStatus(
   };
 }
 
+// ── Amortecimento de piscada (flap damping) ─────────────────────────────────
+
+export interface FlapState {
+  /** Ciclos seguidos reportando down */
+  streak: number;
+  /** Último estado efetivamente mostrado na tela */
+  shown: NodeLiveStatus;
+}
+
+/** Só confirma 'down' depois de `cycles` ciclos seguidos falhando.
+ *
+ *  Existe porque ping perdido, coleta atrasada e resposta parcial do datasource
+ *  são transitórios — somem no ciclo seguinte —, mas cada um pinta o mapa de
+ *  vermelho no meio tempo, e um nó piscando arrasta todos os links dele junto.
+ *
+ *  Regras que NÃO podem ser afrouxadas, sob risco de esconder queda de verdade:
+ *   • recuperação é IMEDIATA (voltou a responder → mostra na hora);
+ *   • quem já estava down continua down (não reabre contagem a cada ciclo);
+ *   • sem estado anterior para segurar, mostra o que veio (carga inicial).
+ *
+ *  `advance` deve ser true só uma vez por chegada de dados: re-render por
+ *  edição ou hover não pode contar como ciclo. Pura — estado entra e sai. */
+export function dampStatus<T extends NodeLiveStatus>(
+  prev: FlapState | undefined,
+  cur: T,
+  cycles: number,
+  advance: boolean
+): { shown: T; next: FlapState } {
+  if (cycles <= 1 || cur.status !== 'down') {
+    return { shown: cur, next: { streak: 0, shown: cur } };
+  }
+
+  const streak = (prev?.streak ?? 0) + (advance ? 1 : 0);
+  const confirmado = streak >= cycles || !prev?.shown || prev.shown.status === 'down';
+  const shown = confirmado ? cur : (prev!.shown as T);
+  return { shown, next: { streak, shown } };
+}
+
 /** Um lado do link COM binding de status configurado. */
 export interface SideStatus {
   /** Como chamar esse lado na mensagem (nome do equipamento ou da interface) */
