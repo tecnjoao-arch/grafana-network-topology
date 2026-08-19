@@ -1,5 +1,6 @@
 const path = require('path');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
+const pkg = require('./package.json');
 
 module.exports = (env, argv) => {
   const isProd = argv.mode === 'production';
@@ -85,7 +86,10 @@ module.exports = (env, argv) => {
                 .toISOString()
                 .replace(/[-:T]/g, '')
                 .slice(0, 14); // YYYYMMDDHHMMSS
-              json.info.version = `0.1.0-${stamp}`;
+              // Versão vem do package.json — estava fixa em "0.1.0" aqui, então
+              // TODA release publicava plugin.json dizendo 0.1.0 e não havia
+              // como saber no servidor qual versão estava instalada.
+              json.info.version = `${pkg.version}-${stamp}`;
               json.info.updated = new Date().toISOString().slice(0, 10);
               return JSON.stringify(json, null, 2);
             },

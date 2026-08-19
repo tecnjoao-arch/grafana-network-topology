@@ -77,6 +77,19 @@ function haystack(frame: DataFrame, field: Field): string {
   return parts.join(SEP);
 }
 
+/** Converte um valor de campo em número SEM a armadilha do null.
+ *
+ *  Number(null) === 0 em JavaScript. O datasource Zabbix, ao fundir todas as
+ *  séries num único frame "wide" (convertToWide em responseHandler.ts, disparado
+ *  quando os primeiros timestamps coincidem — mais provável com alinhamento
+ *  ativo), preenche as lacunas de cada coluna com NULL. Com Number() cru, cada
+ *  null virava 0: tráfego "0 b/s", DOM "0.00 dBm" e ping 0 → equipamento DOWN,
+ *  mapa inteiro vermelho sempre que o formato wide aparecia. NaN é filtrado
+ *  por todos os consumidores; zero REAL (coletado) continua valendo. */
+function toNum(x: unknown): number {
+  return x === null || x === undefined || x === '' ? NaN : Number(x);
+}
+
 function reduce(values: number[], agg: Aggregation): number | undefined {
   const v = values.filter((n) => typeof n === 'number' && !isNaN(n));
   if (v.length === 0) return undefined;
@@ -230,7 +243,7 @@ export function resolveBindingDetailed(
     if (binding.query && f.refId !== binding.query) continue;
     if (!matches(f)) continue;
 
-    const vals = (f.field.values as unknown as any[]).map((x) => Number(x));
+    const vals = (f.field.values as unknown as any[]).map(toNum);
 
     // Checar se o dado está obsoleto (stale) comparando com o timestamp máximo global.
     // Só se aplica a 'last' (valor "agora"); agregações de janela (avg/max/min/first)
@@ -302,8 +315,8 @@ export function resolveBindingSeries(series: DataFrame[], binding?: MetricBindin
     const times: number[] = [];
     const values: number[] = [];
     for (let i = 0; i < rawV.length; i++) {
-      const v = Number(rawV[i]);
-      const t = Number(rawT[i]);
+      const v = toNum(rawV[i]);
+      const t = toNum(rawT[i]);
       if (!isNaN(v) && !isNaN(t)) {
         times.push(t);
         values.push(v);
