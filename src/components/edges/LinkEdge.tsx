@@ -613,7 +613,7 @@ const IfLabel: React.FC<{
   onDragDown?: (e: React.PointerEvent) => void;
   onDragMove?: (e: React.PointerEvent) => void;
   onDragUp?: (e: React.PointerEvent) => void;
-  /** Abrevia o IPv6 no card ("2804:1f18…:14"); completo no título e ao copiar */
+  /** Abrevia o IPv6 no card ("2001:db8…:14"); completo no título e ao copiar */
   shortIpv6?: boolean;
   /** Fora do modo edição: clique abre o modal com os detalhes desta interface */
   onOpenDetails?: () => void;

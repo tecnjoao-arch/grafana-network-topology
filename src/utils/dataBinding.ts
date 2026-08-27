@@ -47,12 +47,12 @@ const GENERIC_PART = /^(wide|long|value|values|time|series|metric|field|__\w+)$/
  *
  *  O MESMO item do Zabbix chega com identificadores diferentes conforme o
  *  formato que o datasource resolve usar:
- *    formato A:  "ASR9K-PUC: ICMP ping • Value"
- *    formato B:  "wide • ASR9K-PUC: ICMP ping • ASR9K-PUC: ICMP ping •
- *                 host=ASR9K-PUC • ASR9K-PUC • item=ICMP ping • ..."
+ *    formato A:  "ROUTER-01: ICMP ping • Value"
+ *    formato B:  "wide • ROUTER-01: ICMP ping • ROUTER-01: ICMP ping •
+ *                 host=ROUTER-01 • ROUTER-01 • item=ICMP ping • ..."
  *  Gravar a string inteira amarra o binding a UM formato — quando o outro volta,
  *  nada casa e o mapa inteiro vira "série não encontrada". Como os dois contêm
- *  o segmento "ASR9K-PUC: ICMP ping", é ELE que deve ser guardado e casado.
+ *  o segmento "ROUTER-01: ICMP ping", é ELE que deve ser guardado e casado.
  *
  *  Descarta partes genéricas e rótulos "chave=valor", e fica com o segmento
  *  mais longo — o mais específico. */

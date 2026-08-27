@@ -338,7 +338,7 @@ export interface PanelOptions {
   downColor: string;
   downLineStyle: LineStyle;
   downAnimation: LineAnimation;
-  /** Abrevia o IPv6 nos cards ("2804:1f18…:14") para eles não ficarem largos
+  /** Abrevia o IPv6 nos cards ("2001:db8…:14") para eles não ficarem largos
    *  demais e se sobreporem. Endereço completo continua no modal e ao copiar. */
   shortenIpv6: boolean;
   /** Ciclos seguidos de falha antes de pintar de vermelho (1 = imediato).

@@ -60,7 +60,7 @@ function splitIpSuffix(raw: string): [string, string] {
  *  esquerda e "::" no MAIOR trecho de zeros.
  *
  *  O Zabbix costuma entregar formas não-canônicas como
- *  "2804:1f18::9606:0:0:0:14", com o "::" num trecho menor que o 0:0:0 seguinte
+ *  "2001:db8::9606:0:0:0:14", com o "::" num trecho menor que o 0:0:0 seguinte
  *  — 4 caracteres a mais no card sem nenhuma informação a mais.
  *  Devolve a entrada intacta se não parecer um IPv6 válido. */
 export function canonicalizeIpv6(raw: string): string {
@@ -106,7 +106,7 @@ export function canonicalizeIpv6(raw: string): string {
   return out + suffix;
 }
 
-/** Abrevia um IPv6 para "prefixo…:host" — ex: "2804:1f18…:14".
+/** Abrevia um IPv6 para "prefixo…:host" — ex: "2001:db8…:14".
  *  Num mapa de rede o prefixo se repete em todo mundo e quem identifica a
  *  interface é o último grupo; o endereço inteiro continua no modal, no tooltip
  *  e ao copiar. Se não render menor que a forma canônica, devolve a canônica. */

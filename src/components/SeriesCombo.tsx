@@ -55,7 +55,7 @@ export const SeriesCombo: React.FC<{
         ref={inputRef}
         type="text"
         value={value}
-        placeholder={placeholder ?? 'ex: UERJ.*if.*in'}
+        placeholder={placeholder ?? 'ex: ROUTER-01.*bits received'}
         onChange={(e) => { onChange(e.target.value); openList(); }}
         onFocus={openList}
         onBlur={() => setOpen(false)}
