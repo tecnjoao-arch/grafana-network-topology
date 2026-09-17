@@ -33,6 +33,28 @@ export function evaluateStatus(
   return isUp ? 'up' : 'down';
 }
 
+/** Status que uma cor de regra representa. As regras de cor são a única
+ *  configuração de status do editor de nó, e o seletor de cor sempre entrega
+ *  #rrggbb. Vermelho = down; laranja/âmbar/amarelo = alerta; cinza, preto e
+ *  branco = indeterminado; qualquer outra cor (verde, azul…) = normal.
+ *  Rosa e magenta ficam fora do vermelho de propósito: são escolha estética
+ *  mais comum que sinal de queda. */
+export function statusFromColor(hex: string): LinkStatus {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return 'up';
+  const n = parseInt(m[1], 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  const l = (max + min) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (s < 0.18 || l < 0.08 || l > 0.95) return 'unknown';
+  let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h = (h * 60 + 360) % 360;
+  if (h < 18 || h >= 340) return 'down';
+  if (h < 70) return 'warning';
+  return 'up';
+}
+
 /** "há 12 min" / "há 45 s" — idade legível da última amostra. */
 function fmtAge(ms?: number): string {
   if (!ms || ms <= 0) return '';
@@ -82,9 +104,22 @@ export function resolveNodeStatus(
     const matched = data.colorMappings.find(
       (m) => String(m.value).trim().toLowerCase() === liveStr
     );
-    // Regra casou: pinta e marca up (o DeviceNode usa `color` pra pintar)
-    if (matched) return { status: 'up', color: matched.color };
-    return { status: 'unknown', cause: 'nao-configurado', detail: 'Valor sem regra correspondente' };
+    if (!matched) {
+      return { status: 'unknown', color: data.color, cause: 'nao-configurado', detail: 'Valor sem regra correspondente' };
+    }
+    // A cor da regra DEFINE o status. Antes, qualquer regra que casasse
+    // marcava o nó como 'up', inclusive "0 → vermelho": o ícone só parecia
+    // caído porque herdava a cor, e o status seguia 'up' — sem derrubar os
+    // links, sem causa, sem amortecimento. Com o ícone colorido pelo status,
+    // isso viraria um roteador caído pintado de azul.
+    const status = statusFromColor(matched.color);
+    return {
+      status,
+      color: data.color,
+      cause: status === 'down' ? 'ping' : undefined,
+      detail: status === 'down' ? 'Equipamento sem resposta'
+        : status === 'warning' ? `Alerta (valor ${liveStr})` : undefined,
+    };
   }
 
   const status = evaluateStatus(r.value, data.statusOperator, data.statusValue);

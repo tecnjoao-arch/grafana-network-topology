@@ -25,7 +25,7 @@ function isSafeUrl(url: string): boolean {
 }
 
 export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
-  const { label, ip, deviceType, status, customIcon, color, iconSize, searchQuery, nodeWidth, nodeHeight, borderRadius, bgColor, linkUrl, showIp, statusDetail } = data as any;
+  const { label, ip, deviceType, status, customIcon, color, iconSize, searchQuery, nodeWidth, nodeHeight, borderRadius, bgColor, linkUrl, showIp, statusDetail, iconColorMode } = data as any;
   // Escala da fonte do painel (opção "Escala da fonte" p/ TV de NOC):
   // textos escalam via em; ícone e badge usam px e precisam multiplicar.
   const fontScale = (data as any).fontScale ?? 1;
@@ -180,7 +180,15 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
       )}
 
       <div style={{ position: 'relative', lineHeight: 0 }}>
-        {getDeviceIcon(deviceType, { size: Math.round((iconSize ?? 56) * fontScale), status, color, customIcon })}
+        {getDeviceIcon(deviceType, {
+          size: Math.round((iconSize ?? 56) * fontScale),
+          status,
+          color,
+          customIcon,
+          colorMode: iconColorMode,
+        })}
+        {/* O ponto mostra só o status. Ele herdava a cor da regra, que agora
+            define o status em vez de pintar o nó diretamente. */}
         {status && status !== 'unknown' && (
           <span
             style={{
@@ -191,12 +199,11 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
               height: Math.round(12 * fontScale),
               borderRadius: '50%',
               background:
-                color ? color :
                 status === 'up' ? '#22c55e' :
                 status === 'warning' ? '#f59e0b' :
                 '#ef4444',
               border: '2px solid #0f172a',
-              boxShadow: color ? `0 0 6px ${color}` : (status === 'down' ? '0 0 6px #ef4444' : 'none'),
+              boxShadow: status === 'down' ? '0 0 6px #ef4444' : 'none',
             }}
           />
         )}

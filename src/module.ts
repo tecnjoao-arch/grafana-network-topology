@@ -72,6 +72,23 @@ export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
         defaultValue: DEFAULT_OPTIONS.dimLinksOnNodeDown,
         category: ['Visual'],
       })
+      .addRadio({
+        path: 'iconColorMode',
+        name: 'Cor dos equipamentos',
+        description:
+          'Como a cor do ícone acompanha o status. "Normal azul" deixa o mapa calmo e só ' +
+          'colore o que tem problema; "Cor do status" pinta tudo de verde/âmbar/vermelho; ' +
+          '"Sempre azul" mantém o ícone fixo e mostra o status só na moldura e no ponto.',
+        defaultValue: DEFAULT_OPTIONS.iconColorMode,
+        settings: {
+          options: [
+            { value: 'c', label: 'Normal azul' },
+            { value: 'b', label: 'Cor do status' },
+            { value: 'a', label: 'Sempre azul' },
+          ],
+        },
+        category: ['Visual'],
+      })
       .addBooleanSwitch({
         path: 'shortenIpv6',
         name: 'Abreviar IPv6 nos cards',

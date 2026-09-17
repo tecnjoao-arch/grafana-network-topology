@@ -5,6 +5,8 @@ export type { MetricBinding } from './utils/dataBinding';
 
 export type DeviceType =
   | 'router'
+  // Variantes antigas de roteador: continuam aceitas nos mapas salvos, mas
+  // desenham o mesmo roteador padrão e não aparecem mais no seletor.
   | 'router_modern'
   | 'router_3d'
   | 'router_cloud'
@@ -15,10 +17,12 @@ export type DeviceType =
   | 'olt'
   | 'cgnat'
   | 'loadbalancer'
-  | 'wifi'
-  | 'antenna'
+  | 'dwdm'
+  | 'wifi'      // access point
+  | 'antenna'   // rádio ponto a ponto
   | 'cloud'
   | 'internet'
+  | 'ix'        // PTT / ponto de troca de tráfego
   | 'database'
   | 'storage'
   | 'desktop'
@@ -31,6 +35,12 @@ export type DeviceType =
   | 'vm'
   | 'generic'
   | 'custom';
+
+/** Como a cor do ícone acompanha o status do equipamento.
+ *  a = sempre azul (status só na moldura e no ponto)
+ *  b = ícone inteiro na cor do status (verde/âmbar/vermelho)
+ *  c = azul no normal; âmbar/vermelho/cinza só quando há algo errado */
+export type IconColorMode = 'a' | 'b' | 'c';
 
 export type LinkStatus = 'up' | 'down' | 'warning' | 'unknown';
 export type StatusOperator = '>' | '>=' | '==' | '<=' | '<' | '!=';
@@ -345,6 +355,8 @@ export interface PanelOptions {
    *  Ping perdido, coleta atrasada e resposta parcial do datasource somem no
    *  ciclo seguinte — sem isso, cada um deles pisca o mapa à toa. */
   downConfirmCycles: number;
+  /** Cor dos ícones dos equipamentos em relação ao status (ver IconColorMode) */
+  iconColorMode: IconColorMode;
   /** Token do Globalping (opcional): aumenta a cota dos testes de rede.
    *  Atenção: fica visível no JSON do dashboard (risco baixo — só controla cota). */
   globalpingToken?: string;
@@ -371,6 +383,7 @@ export const DEFAULT_OPTIONS: PanelOptions = {
   downAnimation: 'pulse',
   shortenIpv6: true,
   downConfirmCycles: 3,
+  iconColorMode: 'c',
   globalpingToken: '',
 };
 

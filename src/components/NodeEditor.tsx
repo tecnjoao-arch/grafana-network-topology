@@ -22,23 +22,69 @@ interface Props {
 
 const AGGS: Aggregation[] = ['last', 'avg', 'max', 'min', 'first'];
 
-const DEVICE_TYPES: Array<{ value: DeviceType; label: string }> = [
-  { value: 'router', label: 'Roteador (Padrão)' },
-  { value: 'router_modern', label: 'Roteador (Moderno)' },
-  { value: 'router_3d', label: 'Roteador (3D Cisco)' },
-  { value: 'router_cloud', label: 'Roteador (Abstrato)' },
-  { value: 'switch', label: 'Switch' },
-  { value: 'firewall', label: 'Firewall' },
-  { value: 'server', label: 'Servidor' },
-  { value: 'cloud', label: 'Nuvem' },
-  { value: 'internet', label: 'Internet' },
-  { value: 'wifi', label: 'Wi-Fi' },
-  { value: 'database', label: 'Banco de Dados' },
-  { value: 'desktop', label: 'Computador' },
-  { value: 'laptop', label: 'Notebook' },
-  { value: 'generic', label: 'Genérico' },
-  { value: 'custom', label: '🖼️ Upload de Imagem' },
+// Agrupado como a rede é pensada. As variantes antigas de roteador
+// (router_modern, router_3d, router_cloud) saíram da lista: mapas salvos com
+// elas continuam funcionando e desenham o roteador padrão.
+const DEVICE_GROUPS: Array<{ group: string; items: Array<{ value: DeviceType; label: string }> }> = [
+  {
+    group: 'Núcleo',
+    items: [
+      { value: 'router', label: 'Roteador' },
+      { value: 'switch', label: 'Switch L2' },
+      { value: 'l3switch', label: 'Switch L3 (multicamada)' },
+      { value: 'firewall', label: 'Firewall' },
+      { value: 'loadbalancer', label: 'Balanceador de carga' },
+      { value: 'cgnat', label: 'CGNAT' },
+    ],
+  },
+  {
+    group: 'Acesso e transporte',
+    items: [
+      { value: 'olt', label: 'OLT (PON)' },
+      { value: 'dwdm', label: 'DWDM / transporte óptico' },
+      { value: 'wifi', label: 'Access point (Wi-Fi)' },
+      { value: 'antenna', label: 'Rádio ponto a ponto' },
+    ],
+  },
+  {
+    group: 'Serviços e nuvem',
+    items: [
+      { value: 'server', label: 'Servidor' },
+      { value: 'database', label: 'Banco de dados' },
+      { value: 'storage', label: 'Storage' },
+      { value: 'cloud', label: 'Nuvem' },
+      { value: 'internet', label: 'Internet' },
+      { value: 'ix', label: 'PTT / IX' },
+    ],
+  },
+  {
+    group: 'Infraestrutura',
+    items: [
+      { value: 'datacenter', label: 'Datacenter' },
+      { value: 'rack', label: 'Rack' },
+      { value: 'ups', label: 'Nobreak' },
+      { value: 'vm', label: 'Máquina virtual' },
+    ],
+  },
+  {
+    group: 'Usuário',
+    items: [
+      { value: 'desktop', label: 'Computador' },
+      { value: 'laptop', label: 'Notebook' },
+      { value: 'phone', label: 'Telefone' },
+      { value: 'camera', label: 'Câmera IP' },
+    ],
+  },
+  {
+    group: 'Outros',
+    items: [
+      { value: 'generic', label: 'Genérico' },
+      { value: 'custom', label: 'Imagem própria (upload)' },
+    ],
+  },
 ];
+
+const LEGACY_ROUTERS: DeviceType[] = ['router_modern', 'router_3d', 'router_cloud'];
 
 export const NodeEditor: React.FC<Props> = ({
   nodeId,
@@ -166,12 +212,18 @@ export const NodeEditor: React.FC<Props> = ({
               style={inputText}
             />
             <select
-              value={data.deviceType}
+              // Nó salvo com uma variante antiga de roteador aparece como
+              // "Roteador" — é o que ele desenha agora.
+              value={LEGACY_ROUTERS.includes(data.deviceType) ? 'router' : data.deviceType}
               onChange={(e) => onChange({ deviceType: e.target.value as DeviceType })}
               style={{ ...inputText, cursor: 'pointer' }}
             >
-              {DEVICE_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+              {DEVICE_GROUPS.map((g) => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.items.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             {data.deviceType === 'custom' && (

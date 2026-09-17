@@ -1,277 +1,416 @@
-// icons/index.tsx — Registry de ícones SVG recoloríveis (usam currentColor).
-// Estilo fiel a diagrama de rede (Cisco-like). Fáceis de estender.
+// icons/index.tsx — Ícones de equipamentos no padrão visual da indústria.
+//
+// Seguem a convenção que todo diagrama de rede usa (disco com 4 setas =
+// roteador, caixa com setas = switch, muro de tijolos = firewall…), mas são
+// desenhados aqui: a Cisco permite usar os ícones oficiais sem alterá-los, e
+// este plugin precisa recolorir por status e é distribuído como Apache 2.0.
+//
+// Cada ícone é o conteúdo de um <svg viewBox="0 0 64 64"> gerado a partir de
+// uma paleta (topo, lateral, sombra, contorno, símbolos). O mesmo desenho
+// serve para o azul de operação normal e para as cores de problema.
 
 import React from 'react';
-import { DeviceType } from '../types';
+import { DeviceType, IconColorMode, LinkStatus } from '../types';
 
-/** Cada ícone é o conteúdo interno de um <svg viewBox="0 0 64 64">.
- *  Usa stroke="currentColor" pra herdar a cor do wrapper. */
-const PATHS: Record<string, string> = {
-  // Router clássico: disco com 4 setas (2 entrando, 2 saindo) — símbolo de roteamento
-  router: `
-    <ellipse cx="32" cy="38" rx="26" ry="14" fill="#0b1220" stroke="currentColor" stroke-width="3"/>
-    <ellipse cx="32" cy="30" rx="26" ry="14" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <g stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none">
-      <path d="M32 30 L46 18"/><path d="M46 24 L46 18 L40 18"/>
-      <path d="M32 30 L18 18"/><path d="M18 24 L18 18 L24 18"/>
-      <path d="M22 34 L14 34"/><path d="M18 30 L14 34 L18 38"/>
-      <path d="M42 34 L50 34"/><path d="M46 30 L50 34 L46 38"/>
-    </g>`,
-  router_modern: `
-    <circle cx="32" cy="32" r="28" fill="#0f172a" stroke="currentColor" stroke-width="2" />
-    <g stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none">
-      <path d="M32 16 L32 48 M32 16 L24 24 M32 16 L40 24" />
-      <path d="M16 32 L48 32 M48 32 L40 24 M48 32 L40 40" />
-    </g>`,
-  router_3d: `
-    <ellipse cx="32" cy="42" rx="28" ry="12" fill="#1e293b" />
-    <path d="M4 28 L4 42 A28 12 0 0 0 60 42 L60 28 Z" fill="#334155" />
-    <ellipse cx="32" cy="28" rx="28" ry="12" fill="#475569" />
-    <g stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
-       <path d="M32 28 L14 28 L20 22 M14 28 L20 34"/>
-       <path d="M32 28 L50 28 L44 22 M50 28 L44 34"/>
-       <path d="M32 10 L32 24 L26 18 M32 24 L38 18"/>
-       <path d="M32 46 L32 32 L26 38 M32 32 L38 38"/>
-    </g>`,
-  router_cloud: `
-    <polygon points="32,4 58,19 58,45 32,60 6,45 6,19" fill="#0f172a" stroke="currentColor" stroke-width="3" stroke-linejoin="round" />
-    <circle cx="32" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3" />
-    <path d="M32 32 L44 26 M32 32 L20 38" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
-    <path d="M32 32 L20 26 M32 32 L44 38" stroke="currentColor" stroke-width="3" stroke-linecap="round" />`,
-  // Switch: caixa com setas bidirecionais cruzadas
-  switch: `
-    <rect x="5" y="20" width="54" height="24" rx="4" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <g stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
-      <path d="M14 28 L30 28 M24 24 L30 28 L24 32"/>
-      <path d="M50 28 L34 28 M40 24 L34 28 L40 32"/>
-      <path d="M14 36 L30 36 M20 32 L14 36 L20 40"/>
-      <path d="M50 36 L34 36 M44 32 L50 36 L44 40"/>
-    </g>`,
-  // Switch L3 / multilayer
-  l3switch: `
-    <rect x="5" y="18" width="54" height="28" rx="4" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <text x="32" y="30" font-size="11" fill="currentColor" text-anchor="middle" font-family="monospace" font-weight="bold">L3</text>
-    <g stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none">
-      <path d="M14 38 L30 38 M24 34 L30 38 L24 42"/>
-      <path d="M50 38 L34 38 M40 34 L34 38 L40 42"/>
-    </g>`,
-  firewall: `
-    <path d="M10 14 L32 6 L54 14 L54 34 C54 46 44 54 32 58 C20 54 10 46 10 34 Z" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round">
-      <path d="M16 22 L48 22"/><path d="M16 30 L48 30"/><path d="M16 38 L48 38"/>
-      <path d="M24 22 L24 30 M40 22 L40 30"/><path d="M20 30 L20 38 M32 30 L32 38 M44 30 L44 38"/>
-    </g>`,
-  server: `
-    <rect x="14" y="8" width="36" height="48" rx="3" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <g stroke="currentColor" stroke-width="2" fill="none">
-      <line x1="14" y1="22" x2="50" y2="22"/><line x1="14" y1="36" x2="50" y2="36"/><line x1="14" y1="50" x2="50" y2="50"/>
-    </g>
-    <circle cx="20" cy="15" r="1.6" fill="#22c55e"/><circle cx="20" cy="29" r="1.6" fill="#22c55e"/><circle cx="20" cy="43" r="1.6" fill="currentColor"/>
-    <rect x="28" y="13" width="18" height="3" fill="currentColor" opacity="0.4"/><rect x="28" y="27" width="18" height="3" fill="currentColor" opacity="0.4"/><rect x="28" y="41" width="18" height="3" fill="currentColor" opacity="0.4"/>`,
-  // OLT (Optical Line Terminal)
-  olt: `
-    <rect x="6" y="20" width="52" height="24" rx="3" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <text x="32" y="29" font-size="9" fill="currentColor" text-anchor="middle" font-family="monospace" font-weight="bold">OLT</text>
-    <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round">
-      <path d="M12 38 L20 38 M26 38 L34 38 M40 38 L48 38"/>
-    </g>`,
-  cgnat: `
-    <rect x="6" y="18" width="52" height="28" rx="4" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <text x="32" y="36" font-size="10" fill="currentColor" text-anchor="middle" font-family="monospace" font-weight="bold">CGNAT</text>`,
-  loadbalancer: `
-    <circle cx="32" cy="32" r="24" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <g stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none">
-      <path d="M20 32 L32 32 M32 32 L44 22 M32 32 L44 32 M32 32 L44 42"/>
-      <circle cx="20" cy="32" r="3" fill="currentColor"/><circle cx="44" cy="22" r="3" fill="currentColor"/><circle cx="44" cy="32" r="3" fill="currentColor"/><circle cx="44" cy="42" r="3" fill="currentColor"/>
-    </g>`,
-  wifi: `
-    <circle cx="32" cy="50" r="5" fill="currentColor"/>
-    <g stroke="currentColor" stroke-width="3.5" fill="none" stroke-linecap="round">
-      <path d="M22 42 Q32 32 42 42"/><path d="M16 36 Q32 18 48 36"/><path d="M10 30 Q32 4 54 30"/>
-    </g>`,
-  antenna: `
-    <line x1="32" y1="14" x2="32" y2="52" stroke="currentColor" stroke-width="3"/>
-    <circle cx="32" cy="12" r="4" fill="currentColor"/>
-    <path d="M22 24 Q32 14 42 24" stroke="currentColor" stroke-width="2.5" fill="none"/>
-    <path d="M16 30 Q32 12 48 30" stroke="currentColor" stroke-width="2.5" fill="none"/>
-    <path d="M24 52 L40 52" stroke="currentColor" stroke-width="3"/>`,
-  cloud: `
-    <path d="M18 46 C8 46 6 36 14 32 C12 20 28 16 34 24 C40 18 56 24 52 34 C60 38 58 46 48 46 Z" fill="#0f172a" stroke="currentColor" stroke-width="3"/>`,
-  internet: `
-    <circle cx="32" cy="32" r="26" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <ellipse cx="32" cy="32" rx="26" ry="12" stroke="currentColor" stroke-width="2" fill="none"/>
-    <ellipse cx="32" cy="32" rx="12" ry="26" stroke="currentColor" stroke-width="2" fill="none"/>
-    <path d="M6 32 L58 32 M32 6 L32 58" stroke="currentColor" stroke-width="1.5"/>`,
-  database: `
-    <ellipse cx="32" cy="12" rx="20" ry="6" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <path d="M12 12 L12 52 C12 56 21 60 32 60 C43 60 52 56 52 52 L52 12" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <path d="M12 26 C12 30 21 33 32 33 C43 33 52 30 52 26" stroke="currentColor" stroke-width="2.5" fill="none"/>
-    <path d="M12 40 C12 44 21 47 32 47 C43 47 52 44 52 40" stroke="currentColor" stroke-width="2.5" fill="none"/>`,
-  storage: `
-    <rect x="10" y="14" width="44" height="36" rx="3" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <g stroke="currentColor" stroke-width="2" fill="none"><line x1="10" y1="26" x2="54" y2="26"/><line x1="10" y1="38" x2="54" y2="38"/></g>
-    <circle cx="46" cy="20" r="2" fill="currentColor"/><circle cx="46" cy="32" r="2" fill="currentColor"/><circle cx="46" cy="44" r="2" fill="currentColor"/>`,
-  desktop: `
-    <rect x="10" y="12" width="44" height="30" rx="2" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <path d="M24 50 L40 50 M28 42 L28 50 M36 42 L36 50" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>`,
-  laptop: `
-    <rect x="14" y="14" width="36" height="24" rx="2" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <path d="M8 46 L56 46 L52 38 L12 38 Z" fill="#0f172a" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>`,
-  phone: `
-    <rect x="20" y="8" width="24" height="48" rx="4" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <line x1="20" y1="16" x2="44" y2="16" stroke="currentColor" stroke-width="2"/>
-    <line x1="20" y1="46" x2="44" y2="46" stroke="currentColor" stroke-width="2"/>
-    <circle cx="32" cy="51" r="2" fill="currentColor"/>`,
-  camera: `
-    <rect x="8" y="20" width="40" height="26" rx="3" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <path d="M48 28 L58 22 L58 44 L48 38 Z" fill="#0f172a" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
-    <circle cx="24" cy="33" r="7" stroke="currentColor" stroke-width="2.5" fill="none"/>`,
-  rack: `
-    <rect x="16" y="6" width="32" height="52" rx="2" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <g stroke="currentColor" stroke-width="2" fill="none">
-      <rect x="20" y="11" width="24" height="8"/><rect x="20" y="23" width="24" height="8"/><rect x="20" y="35" width="24" height="8"/><rect x="20" y="47" width="24" height="6"/>
-    </g>`,
-  datacenter: `
-    <path d="M8 56 L8 24 L32 10 L56 24 L56 56 Z" fill="#0f172a" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
-    <g stroke="currentColor" stroke-width="2" fill="none"><rect x="18" y="32" width="10" height="20"/><rect x="36" y="32" width="10" height="20"/></g>`,
-  ups: `
-    <rect x="16" y="8" width="32" height="48" rx="3" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <path d="M34 18 L26 36 L33 36 L30 50 L40 30 L33 30 Z" fill="currentColor"/>`,
-  vm: `
-    <rect x="8" y="12" width="48" height="34" rx="3" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <circle cx="32" cy="29" r="9" stroke="currentColor" stroke-width="2.5" fill="none"/>
-    <path d="M32 24 L32 29 L36 32" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-    <path d="M24 52 L40 52" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>`,
-  generic: `
-    <rect x="12" y="12" width="40" height="40" rx="6" fill="#0f172a" stroke="currentColor" stroke-width="3"/>
-    <circle cx="32" cy="32" r="6" fill="currentColor"/>`,
-};
+// ── Cor ──────────────────────────────────────────────────────────────────────
 
-// ── Ícones 3D isométricos (tingidos pela cor do status) ──────────────────────
-// Derivam 3 tons da cor base (status): topo claro, lateral médio, base escura.
-// Mantém o sinal de NOC: down = vermelho, alerta = laranja, up = verde.
+type RGB = [number, number, number];
+const BLACK: RGB = [0, 0, 0];
+const WHITE: RGB = [255, 255, 255];
 
-function parseHex(hex: string): [number, number, number] | null {
-  if (!/^#?[0-9a-fA-F]{3}$|^#?[0-9a-fA-F]{6}$/.test(hex)) return null;
-  const h = hex.replace('#', '');
-  const n = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
-  return [parseInt(n.slice(0, 2), 16), parseInt(n.slice(2, 4), 16), parseInt(n.slice(4, 6), 16)];
+function parseHex(hex: string): RGB | null {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const h = m[1].length === 3 ? m[1].split('').map((c) => c + c).join('') : m[1];
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
-function mix(hex: string, target: [number, number, number], amt: number): string {
+
+function mix(hex: string, target: RGB, amt: number): string {
   const rgb = parseHex(hex);
   if (!rgb) return hex;
   const c = (a: number, t: number) => Math.max(0, Math.min(255, Math.round(a + (t - a) * amt)));
-  const h2 = (v: number) => v.toString(16).padStart(2, '0');
-  return '#' + h2(c(rgb[0], target[0])) + h2(c(rgb[1], target[1])) + h2(c(rgb[2], target[2]));
+  return '#' + rgb.map((v, i) => c(v, target[i]).toString(16).padStart(2, '0')).join('');
 }
-interface Shades { light: string; mid: string; dark: string; edge: string; }
-function shades(base: string): Shades {
+
+interface Palette {
+  top: string;   // face de cima (a mais iluminada)
+  side: string;  // face da frente / lateral do cilindro
+  sideD: string; // lado escuro do cilindro
+  sideL: string; // lado claro do cilindro
+  dark: string;  // face lateral das caixas, fendas e telas
+  line: string;  // contorno
+  hi: string;    // destaques (ondas de rádio, LEDs)
+  arw: string;   // setas e símbolos desenhados sobre o ícone
+}
+
+function palette(base: string): Palette {
+  const side = mix(base, BLACK, 0.28);
   return {
-    light: mix(base, [255, 255, 255], 0.16),
-    mid: mix(base, [0, 0, 0], 0.06),
-    dark: mix(base, [0, 0, 0], 0.5),
-    edge: mix(base, [255, 255, 255], 0.45),
+    top: mix(base, BLACK, 0.06),
+    side,
+    sideD: mix(side, BLACK, 0.16),
+    sideL: mix(side, WHITE, 0.14),
+    dark: mix(base, BLACK, 0.48),
+    line: mix(base, BLACK, 0.66),
+    hi: mix(base, WHITE, 0.22),
+    // Azul-claro em vez de branco puro: o símbolo parece pintado no ícone
+    arw: mix(base, WHITE, 0.84),
   };
 }
 
-const ARROW_MARKER =
-  '<defs><marker id="ndarw" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">' +
-  '<path d="M2 1 L8 5 L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>';
-
-/** 4 setas brancas saindo do centro (símbolo de roteamento). */
-const arrows4 = (cx: number, cy: number, rx: number, ry: number, w = 2.4): string =>
-  `<g stroke="#fff" stroke-width="${w}" stroke-linecap="round" marker-end="url(#ndarw)">
-    <line x1="${cx}" y1="${cy}" x2="${cx + rx}" y2="${cy - ry}"/>
-    <line x1="${cx}" y1="${cy}" x2="${cx - rx}" y2="${cy - ry}"/>
-    <line x1="${cx}" y1="${cy}" x2="${cx + rx}" y2="${cy + ry}"/>
-    <line x1="${cx}" y1="${cy}" x2="${cx - rx}" y2="${cy + ry}"/>
-  </g>`;
-
-const puck3D = (s: Shades): string => ARROW_MARKER +
-  `<ellipse cx="32" cy="43" rx="27" ry="8.5" fill="${s.dark}"/>
-   <path d="M5 32 L5 43 A27 8.5 0 0 0 59 43 L59 32 Z" fill="${s.mid}"/>
-   <ellipse cx="32" cy="32" rx="27" ry="8.5" fill="${s.light}" stroke="${s.edge}" stroke-width="1.2"/>
-   ${arrows4(32, 32, 15, 6.5)}`;
-
-const box3D = (s: Shades, extra = ''): string => ARROW_MARKER +
-  `<path d="M10 24 L32 15 L54 24 L32 33 Z" fill="${s.light}" stroke="${s.edge}" stroke-width="1"/>
-   <path d="M10 24 L10 40 L32 49 L32 33 Z" fill="${s.mid}"/>
-   <path d="M54 24 L54 40 L32 49 L32 33 Z" fill="${s.dark}"/>
-   ${extra}`;
-
-const switch3D = (s: Shades): string => box3D(s, arrows4(32, 24, 14, 5.5, 2.2));
-
-const l3switch3D = (s: Shades): string => box3D(s,
-  `<text x="20" y="45" font-size="9" font-family="monospace" font-weight="bold" fill="#fff">L3</text>` +
-  arrows4(34, 23, 11, 4.5, 1.9));
-
-const server3D = (s: Shades): string =>
-  `<path d="M19 14 L32 8 L45 14 L32 20 Z" fill="${s.light}" stroke="${s.edge}" stroke-width="1"/>
-   <path d="M19 14 L19 50 L32 56 L32 20 Z" fill="${s.mid}"/>
-   <path d="M45 14 L45 50 L32 56 L32 20 Z" fill="${s.dark}"/>
-   <g stroke="${s.edge}" stroke-width="1" opacity="0.7">
-     <line x1="22" y1="25" x2="29" y2="28.5"/>
-     <line x1="22" y1="31" x2="29" y2="34.5"/>
-     <line x1="22" y1="37" x2="29" y2="40.5"/>
-   </g>`;
-
-const firewall3D = (s: Shades): string =>
-  `<path d="M32 7 L53 14 L53 31 C53 43 44 51 32 56 C20 51 11 43 11 31 L11 14 Z" fill="${s.light}" stroke="${s.edge}" stroke-width="1.2"/>
-   <path d="M32 7 L32 56 C20 51 11 43 11 31 L11 14 Z" fill="${s.mid}"/>
-   <g stroke="${s.dark}" stroke-width="1.5" fill="none" opacity="0.9">
-     <line x1="11" y1="24" x2="53" y2="24"/><line x1="11" y1="38" x2="53" y2="38"/>
-     <line x1="32" y1="14" x2="32" y2="24"/><line x1="21" y1="24" x2="21" y2="38"/>
-     <line x1="43" y1="24" x2="43" y2="38"/><line x1="32" y1="38" x2="32" y2="50"/>
-   </g>`;
-
-const BUILDERS: Record<string, (s: Shades) => string> = {
-  router: puck3D, router_modern: puck3D, router_3d: puck3D, router_cloud: puck3D,
-  switch: switch3D, l3switch: l3switch3D,
-  server: server3D,
-  firewall: firewall3D,
+/** Bases de cor dos ícones. As de problema são tons mais escuros que as cores
+ *  de status da moldura: no âmbar claro, a seta clara quase sumia. */
+const BASE = {
+  normal: '#2E89C6', // azul da convenção de diagramas de rede
+  up: '#16A34A',
+  warning: '#D97706',
+  down: '#DC2626',
+  unknown: '#64748B',
 };
 
-export const ICON_KEYS = Object.keys(PATHS);
+/** Cor base do ícone para um status, conforme o modo escolhido no painel.
+ *  Uma cor fixa definida no nó substitui só a cor calma: problema continua
+ *  inconfundível em qualquer modo (exceto no A, onde o status fica na moldura). */
+function iconBase(status: LinkStatus | undefined, mode: IconColorMode, fixed?: string): string {
+  const calm = fixed && parseHex(fixed) ? fixed : undefined;
+  if (mode === 'a') return calm ?? BASE.normal;
+  if (status === 'down') return BASE.down;
+  if (status === 'warning') return BASE.warning;
+  if (status === 'unknown') return BASE.unknown;
+  if (status === 'up' && mode === 'b') return calm ?? BASE.up;
+  // Operação normal no modo C, ou elemento estático sem status (nuvem, PTT…)
+  return calm ?? BASE.normal;
+}
+
+// ── Geometria ────────────────────────────────────────────────────────────────
+
+type Mapper = (a: number, b: number) => [number, number];
+
+const r1 = (n: number) => Math.round(n * 10) / 10;
+const ID: Mapper = (a, b) => [a, b];
+
+const pts = (M: Mapper, P: Array<[number, number]>) =>
+  P.map(([a, b]) => M(a, b).map(r1).join(',')).join(' ');
+
+/** Seta sólida (haste + ponta triangular) desenhada num plano local e levada
+ *  à tela por M. Desenhar no plano e depois projetar é o que faz a seta
+ *  parecer deitada sobre a face do ícone, acompanhando a perspectiva. */
+function arrow(M: Mapper, x1: number, y1: number, x2: number, y2: number,
+  t: number, h: number, hl: number, c: string): string {
+  const L = Math.hypot(x2 - x1, y2 - y1);
+  const ux = (x2 - x1) / L, uy = (y2 - y1) / L, nx = -uy, ny = ux;
+  const bx = x2 - ux * hl, by = y2 - uy * hl;
+  return `<polygon points="${pts(M, [
+    [x1 + nx * t, y1 + ny * t], [bx + nx * t, by + ny * t], [bx + nx * h, by + ny * h],
+    [x2, y2],
+    [bx - nx * h, by - ny * h], [bx - nx * t, by - ny * t], [x1 - nx * t, y1 - ny * t],
+  ])}" fill="${c}"/>`;
+}
+
+/** Haste sem ponta (tronco de onde saem outras setas). */
+function stem(M: Mapper, x1: number, y1: number, x2: number, y2: number, t: number, c: string): string {
+  const L = Math.hypot(x2 - x1, y2 - y1);
+  const nx = (-(y2 - y1) / L) * t, ny = ((x2 - x1) / L) * t;
+  return `<polygon points="${pts(M, [[x1 + nx, y1 + ny], [x2 + nx, y2 + ny], [x2 - nx, y2 - ny], [x1 - nx, y1 - ny]])}" fill="${c}"/>`;
+}
+
+/** Caixa em perspectiva: face da frente (x,y,w,h) + tampo e lateral recuados. */
+function box(p: Palette, x: number, y: number, w: number, h: number, dx: number, dy: number): string {
+  const s = `stroke="${p.line}" stroke-width="1" stroke-linejoin="round"`;
+  return (
+    `<path d="M${x} ${y}L${x + dx} ${y - dy}H${x + w + dx}L${x + w} ${y}Z" fill="${p.top}" ${s}/>` +
+    `<path d="M${x} ${y}H${x + w}V${y + h}H${x}Z" fill="${p.side}" ${s}/>` +
+    `<path d="M${x + w} ${y}L${x + w + dx} ${y - dy}V${y + h - dy}L${x + w} ${y + h}Z" fill="${p.dark}" ${s}/>`
+  );
+}
+
+/** Lateral de cilindro (roteador, banco de dados) em 3 faixas, escura à
+ *  esquerda e clara à direita, como no ícone de referência. Faixas desenhadas
+ *  por geometria — sem clipPath, que exigiria id único por ícone na página. */
+function cylinder(p: Palette, cx: number, rx: number, ry: number, yTop: number, yBot: number): string {
+  const x0 = cx - rx, w = (2 * rx) / 3;
+  const arcY = (x: number) => yBot + ry * Math.sqrt(Math.max(0, 1 - ((x - cx) / rx) ** 2));
+  const fills = [p.sideD, p.side, p.sideL];
+  let s = '';
+  for (let i = 0; i < 3; i++) {
+    const a = x0 + i * w;
+    // Sobreposição de 0.4 entre faixas evita fresta de antialiasing
+    const b = i === 2 ? cx + rx : x0 + (i + 1) * w + 0.4;
+    s += `<path d="M${r1(a)} ${yTop}V${r1(arcY(a))}A${rx} ${ry} 0 0 0 ${r1(b)} ${r1(arcY(b))}V${yTop}Z" fill="${fills[i]}"/>`;
+  }
+  return s + `<path d="M${x0} ${yTop}V${yBot}A${rx} ${ry} 0 0 0 ${cx + rx} ${yBot}V${yTop}" fill="none" stroke="${p.line}"/>`;
+}
+
+const line = (x1: number, y1: number, x2: number, y2: number, c: string, w: number) =>
+  `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>`;
+const dot = (x: number, y: number, r: number, c: string) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${c}"/>`;
+
+function arc(cx: number, cy: number, r: number, a1: number, a2: number, c: string, w: number): string {
+  const at = (a: number) => [r1(cx + r * Math.cos((a * Math.PI) / 180)), r1(cy + r * Math.sin((a * Math.PI) / 180))];
+  const [sx, sy] = at(a1), [ex, ey] = at(a2);
+  return `<path d="M${sx} ${sy}A${r} ${r} 0 0 1 ${ex} ${ey}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>`;
+}
+
+// Caixa "baixa" dos equipamentos de rede (switch, OLT, CGNAT…) e o plano do
+// seu tampo: U ao longo da largura (0..46), V ao longo da profundidade (0..17).
+const SB = { x: 3, y: 30, w: 46, h: 17, dx: 12, dy: 12, D: 17 };
+const TOP: Mapper = (u, v) => [SB.x + u + (v * SB.dx) / SB.D, SB.y - (v * SB.dy) / SB.D];
+const switchBox = (p: Palette) => box(p, SB.x, SB.y, SB.w, SB.h, SB.dx, SB.dy);
+
+// Tampo do roteador: círculo de raio 29 achatado pela elipse (29 x 11.5).
+// O centro das setas desce um pouco: símbolo chapado parece mais para a
+// frente em perspectiva.
+const RK = 11.5 / 29;
+const ROUTER_TOP: Mapper = (a, b) => [32 + a, 22.8 + b * RK];
+const polar = (r: number, deg: number): [number, number] =>
+  [r * Math.cos((deg * Math.PI) / 180), r * Math.sin((deg * Math.PI) / 180)];
+
+/** Seta do "X" do roteador. As que entram apontam para o centro e as que saem
+ *  começam nele — o X fecha no meio, como no símbolo clássico. */
+function routerArrow(deg: number, out: boolean, c: string): string {
+  const inner = 3.8, outer = 22;
+  const [a1, b1] = polar(out ? inner : outer, deg);
+  const [a2, b2] = polar(out ? outer : inner, deg);
+  return arrow(ROUTER_TOP, a1, b1, a2, b2, 1.6, 5.2, 7.5, c);
+}
+
+/** Mesmo X do roteador, no tampo da caixa (convenção de switch multicamada). */
+function l3Arrow(du: number, dv: number, out: boolean, c: string): string {
+  const L = Math.hypot(du, dv), u = du / L, v = dv / L;
+  const [ra, rb] = out ? [2.2, 14.5] : [14.5, 2.2];
+  return arrow(TOP, 23 + u * ra, 8.5 + v * ra, 23 + u * rb, 8.5 + v * rb, 0.95, 3, 4.6, c);
+}
+
+const CLOUD = 'M16 50C7 50 3 43 7 36.5C4 28 12 21 20.5 23.5C23 13 37 11 42.5 19C49 15.5 58 21 57 29.5C63 32 63 47 52 50Z';
+
+// ── Ícones ───────────────────────────────────────────────────────────────────
+
+const ICONS: Record<string, (p: Palette) => string> = {
+  router: (p) =>
+    cylinder(p, 32, 29, 11.5, 22, 41) +
+    `<ellipse cx="32" cy="22" rx="29" ry="11.5" fill="${p.top}" stroke="${p.line}"/>` +
+    routerArrow(-140, false, p.arw) + routerArrow(-40, true, p.arw) +
+    routerArrow(140, true, p.arw) + routerArrow(40, false, p.arw),
+
+  // Duas setas para a direita atrás, duas para a esquerda na frente
+  switch: (p) =>
+    switchBox(p) +
+    arrow(TOP, 5, 12, 21, 12, 1.1, 3.1, 5.2, p.arw) + arrow(TOP, 25, 12, 41, 12, 1.1, 3.1, 5.2, p.arw) +
+    arrow(TOP, 20, 5, 4, 5, 1.1, 3.1, 5.2, p.arw) + arrow(TOP, 40, 5, 24, 5, 1.1, 3.1, 5.2, p.arw),
+
+  l3switch: (p) =>
+    switchBox(p) +
+    l3Arrow(-1, 0.5, false, p.arw) + l3Arrow(1, 0.5, true, p.arw) +
+    l3Arrow(-1, -0.5, true, p.arw) + l3Arrow(1, -0.5, false, p.arw),
+
+  firewall: (p) => {
+    let s = box(p, 6, 22, 40, 34, 14, 10);
+    const m = p.top;
+    for (const y of [30.5, 39, 47.5]) s += line(6, y, 46, y, m, 1.5) + line(46, y, 60, y - 10, m, 1.3);
+    const joints: Array<[number, number, number[]]> = [
+      [22, 30.5, [19.3, 32.7]], [30.5, 39, [12.7, 26, 39.3]],
+      [39, 47.5, [19.3, 32.7]], [47.5, 56, [12.7, 26, 39.3]],
+    ];
+    for (const [a, b, xs] of joints) for (const x of xs) s += line(x, a, x, b, m, 1.5);
+    return s;
+  },
+
+  // Um tronco que se divide em três: distribuição de carga
+  loadbalancer: (p) =>
+    switchBox(p) +
+    stem(TOP, 3, 8.5, 15, 8.5, 1, p.arw) +
+    arrow(TOP, 15, 8.5, 42, 14.5, 1, 2.7, 4.6, p.arw) +
+    arrow(TOP, 15, 8.5, 43.5, 8.5, 1, 2.7, 4.6, p.arw) +
+    arrow(TOP, 15, 8.5, 42, 2.5, 1, 2.7, 4.6, p.arw),
+
+  // Muitos endereços convergindo para um só (o inverso da OLT)
+  cgnat: (p) =>
+    switchBox(p) +
+    [33.5, 38.5, 43.5].map((y) => line(8, y, 24, 38.5, p.arw, 1.8) + dot(8, y, 1.9, p.arw)).join('') +
+    arrow(ID, 24, 38.5, 45, 38.5, 1.4, 4, 6, p.arw),
+
+  // Fibra chegando e se dividindo no splitter (PON)
+  olt: (p) =>
+    switchBox(p) +
+    line(7, 38.5, 21, 38.5, p.arw, 2.2) +
+    [33, 38.5, 44].map((y) => line(21, 38.5, 42, y, p.arw, 1.6) + dot(42, y, 2, p.arw)).join('') +
+    dot(21, 38.5, 2.8, p.arw),
+
+  // Vários comprimentos de onda na mesma fibra
+  dwdm: (p) =>
+    switchBox(p) +
+    [34, 38.5, 43].map((y, i) =>
+      `<path d="M${r1(7 + i * 0.8)} ${y}q2.375 -3.4 4.75 0t4.75 0t4.75 0t4.75 0t4.75 0t4.75 0t4.75 0t4.75 0" fill="none" stroke="${p.arw}" stroke-width="1.5" stroke-linecap="round"/>`
+    ).join(''),
+
+  // Access point: disco fino com ondas
+  wifi: (p) =>
+    `<path d="M8 48V53A24 7 0 0 0 56 53V48Z" fill="${p.side}" stroke="${p.line}"/>` +
+    `<ellipse cx="32" cy="48" rx="24" ry="7" fill="${p.top}" stroke="${p.line}"/>` +
+    dot(32, 48, 1.9, p.arw) +
+    [8, 15, 22].map((r) => arc(32, 42, r, 215, 325, p.hi, 3)).join(''),
+
+  // Rádio ponto a ponto: parabólica redonda vista de três quartos, no mastro,
+  // com o alimentador e o sinal. De perfil (fina e no alto), lia como pá de
+  // turbina eólica.
+  antenna: (p) =>
+    `<ellipse cx="32" cy="60" rx="9" ry="2.4" fill="${p.dark}"/>` +
+    `<path d="M30 60L31 30H33L34 60Z" fill="${p.side}" stroke="${p.line}"/>` +
+    line(32, 31, 29, 24, p.side, 3) +
+    `<ellipse cx="27" cy="20" rx="7.5" ry="12" fill="${p.top}" stroke="${p.line}"/>` +
+    `<ellipse cx="27.8" cy="20" rx="4.6" ry="8.6" fill="${p.side}"/>` +
+    line(28, 20, 39, 20, p.arw, 1.6) + dot(39, 20, 1.7, p.arw) +
+    [6, 11].map((r) => arc(39, 20, r, -45, 45, p.hi, 2.6)).join(''),
+
+  server: (p) => {
+    let s = box(p, 18, 13, 24, 45, 10, 7);
+    for (const y of [25, 37, 49]) s += line(18, y, 42, y, p.top, 1.3);
+    for (const y of [17.5, 29.5, 41.5]) s += `<rect x="22" y="${y}" width="16" height="2.6" rx="1.2" fill="${p.top}"/>`;
+    return s + dot(23.5, 53.5, 1.6, p.arw) + dot(28.5, 53.5, 1.6, p.hi);
+  },
+
+  database: (p) =>
+    cylinder(p, 32, 20, 6.5, 14, 50) +
+    `<ellipse cx="32" cy="14" rx="20" ry="6.5" fill="${p.top}" stroke="${p.line}"/>` +
+    `<path d="M12 26A20 6.5 0 0 0 52 26M12 38A20 6.5 0 0 0 52 38" fill="none" stroke="${p.top}" stroke-width="1.5"/>`,
+
+  storage: (p) => {
+    let s = box(p, 5, 28, 42, 26, 12, 9);
+    for (const y of [32, 39.5, 47]) {
+      s += `<rect x="9" y="${y}" width="28" height="4.8" rx="1.2" fill="${p.dark}"/>` + dot(41.5, r1(y + 2.4), 1.3, p.arw);
+    }
+    return s;
+  },
+
+  cloud: (p) => `<path d="${CLOUD}" fill="${p.top}" stroke="${p.line}" stroke-width="1.2"/>`,
+
+  internet: (p) =>
+    `<circle cx="32" cy="32" r="26" fill="${p.top}" stroke="${p.line}" stroke-width="1.2"/>` +
+    `<ellipse cx="32" cy="32" rx="11" ry="26" fill="none" stroke="${p.side}" stroke-width="1.8"/>` +
+    `<path d="M6 32H58M9.5 19H54.5M9.5 45H54.5" stroke="${p.side}" stroke-width="1.6" fill="none"/>`,
+
+  // PTT: a nuvem com várias redes ligadas a um ponto comum
+  ix: (p) =>
+    `<path d="${CLOUD}" fill="${p.top}" stroke="${p.line}" stroke-width="1.2"/>` +
+    ([[15, 37], [49, 37], [23, 27], [41, 27]] as Array<[number, number]>)
+      .map(([x, y]) => line(32, 34, x, y, p.arw, 1.6) + dot(x, y, 2.4, p.arw)).join('') +
+    `<rect x="26.5" y="31" width="11" height="6" rx="1.4" fill="${p.arw}"/>`,
+
+  desktop: (p) =>
+    `<ellipse cx="27" cy="52" rx="13" ry="3.2" fill="${p.side}" stroke="${p.line}"/>` +
+    `<path d="M24 40H30V52H24Z" fill="${p.side}" stroke="${p.line}"/>` +
+    box(p, 7, 13, 40, 28, 7, 5) +
+    `<rect x="10" y="16" width="34" height="22" rx="1" fill="${p.dark}"/>`,
+
+  laptop: (p) =>
+    `<path d="M3 50L15 42H61L49 50Z" fill="${p.top}" stroke="${p.line}" stroke-linejoin="round"/>` +
+    `<path d="M3 50H49V54H3Z" fill="${p.side}" stroke="${p.line}" stroke-linejoin="round"/>` +
+    `<path d="M49 50L61 42V46L49 54Z" fill="${p.dark}" stroke="${p.line}" stroke-linejoin="round"/>` +
+    box(p, 15, 14, 36, 28, 6, 4) +
+    `<rect x="18" y="17" width="30" height="22" rx="1" fill="${p.dark}"/>` +
+    line(9.6, 47.6, 43.6, 47.6, p.dark, 1.4) + line(12.9, 45.4, 46.9, 45.4, p.dark, 1.4),
+
+  phone: (p) =>
+    box(p, 20, 9, 22, 46, 6, 4) +
+    `<rect x="22.5" y="13" width="17" height="35" rx="1" fill="${p.dark}"/>` +
+    line(28, 11, 34, 11, p.arw, 1.2) + dot(31, 51.5, 1.6, p.arw),
+
+  // Câmera de segurança: suporte na parede e corpo alongado com a lente na
+  // ponta. De frente e presa no teto, lia como projetor.
+  camera: (p) =>
+    `<rect x="3" y="30" width="6" height="18" rx="1" fill="${p.side}" stroke="${p.line}"/>` +
+    line(9, 39, 20, 35, p.side, 4) +
+    box(p, 14, 26, 36, 12, 9, 6) +
+    `<path d="M12 26L22 18H62L54 26Z" fill="${p.top}" stroke="${p.line}" stroke-linejoin="round"/>` +
+    `<ellipse cx="54.5" cy="29" rx="2.9" ry="5.2" fill="${p.dark}" stroke="${p.line}"/>` +
+    `<ellipse cx="54.8" cy="29" rx="1.4" ry="2.6" fill="${p.hi}"/>` +
+    dot(20, 32, 1.3, p.arw),
+
+  rack: (p) => {
+    let s = box(p, 16, 10, 28, 48, 8, 5);
+    for (let i = 0; i < 6; i++) {
+      const y = r1(13 + i * 7.4);
+      s += `<rect x="19" y="${y}" width="22" height="5.4" rx="0.8" fill="${p.dark}"/>` +
+        dot(37.5, r1(y + 2.7), 1, i % 2 ? p.arw : p.hi);
+    }
+    return s;
+  },
+
+  datacenter: (p) => {
+    let s = box(p, 8, 20, 36, 38, 12, 8);
+    for (const y of [25, 32, 39]) {
+      s += `<rect x="12" y="${y}" width="28" height="4" rx="0.8" fill="${p.dark}"/>` + dot(36, y + 2, 1.1, p.arw);
+    }
+    return s + `<rect x="22" y="47" width="8" height="11" fill="${p.dark}"/>`;
+  },
+
+  ups: (p) =>
+    box(p, 16, 14, 28, 44, 9, 6) +
+    `<rect x="20" y="18" width="20" height="7" rx="1" fill="${p.dark}"/>` +
+    `<polygon points="33,28 24,43 30,43 27,54 38,37 32,37 35,28" fill="${p.arw}"/>`,
+
+  // Máquina virtual: arestas tracejadas (não é uma caixa física) e um cubo
+  vm: (p) => {
+    const s = `stroke="${p.arw}" stroke-width="1.2" stroke-dasharray="3 2" stroke-linejoin="round"`;
+    return (
+      `<path d="M8 24L20 16H60L48 24Z" fill="${p.top}" ${s}/>` +
+      `<path d="M8 24H48V52H8Z" fill="${p.side}" ${s}/>` +
+      `<path d="M48 24L60 16V44L48 52Z" fill="${p.dark}" ${s}/>` +
+      `<path d="M22 33H32V43H22ZM22 33L26 30H36L32 33M32 43L36 40V30" fill="none" stroke="${p.arw}" stroke-width="1.3" stroke-linejoin="round"/>`
+    );
+  },
+
+  generic: (p) => box(p, 12, 24, 30, 30, 12, 10),
+};
+
+// Variantes antigas de roteador desenham o roteador padrão
+const ALIAS: Record<string, string> = {
+  router_modern: 'router',
+  router_3d: 'router',
+  router_cloud: 'router',
+};
+
+/** Tipos com ícone próprio (para testes e listagens). */
+export const ICON_KEYS = Object.keys(ICONS);
+
+/** Conteúdo SVG (viewBox 0 0 64 64) de um equipamento. Puro: facilita testar
+ *  e pré-visualizar os ícones fora do React. */
+export function deviceIconMarkup(
+  type: string,
+  status?: LinkStatus,
+  mode: IconColorMode = 'c',
+  fixedColor?: string
+): string {
+  const key = ALIAS[type] ?? type;
+  const draw = ICONS[key] ?? ICONS.generic;
+  return draw(palette(iconBase(status, mode, fixedColor)));
+}
 
 interface IconProps {
   size?: number;
-  status?: string;
+  status?: LinkStatus;
+  /** Cor fixa do equipamento: substitui só a cor de operação normal */
   color?: string;
   customIcon?: string;
-}
-
-function statusColor(status?: string): string {
-  return (
-    status === 'down' ? '#ef4444' :
-    status === 'warning' ? '#f59e0b' :
-    status === 'up' ? '#22c55e' :
-    '#22d3ee'
-  );
+  colorMode?: IconColorMode;
 }
 
 export function getDeviceIcon(type: DeviceType, opts: IconProps = {}): React.ReactElement {
   const size = opts.size ?? 56;
 
-  if (type === 'custom') {
-    if (opts.customIcon) {
-      return <img src={opts.customIcon} alt="custom" width={size} height={size} style={{ objectFit: 'contain' }} />;
-    }
-    type = 'generic' as DeviceType;
+  if (type === 'custom' && opts.customIcon) {
+    return <img src={opts.customIcon} alt="custom" width={size} height={size} style={{ objectFit: 'contain' }} />;
   }
-
-  // Cor: override fixo (opts.color) tem prioridade sobre cor por status
-  const color = opts.color ?? statusColor(opts.status);
-  // Ícones 3D (tingidos pela cor) têm prioridade; o resto cai nos PATHS (currentColor)
-  const builder = BUILDERS[type];
-  const inner = builder ? builder(shades(color)) : (PATHS[type] ?? PATHS.generic);
 
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 64 64"
-      style={{ color, display: 'block' }}
-      dangerouslySetInnerHTML={{ __html: inner }}
+      style={{ display: 'block' }}
+      dangerouslySetInnerHTML={{
+        __html: deviceIconMarkup(type === 'custom' ? 'generic' : type, opts.status, opts.colorMode, opts.color),
+      }}
     />
   );
 }

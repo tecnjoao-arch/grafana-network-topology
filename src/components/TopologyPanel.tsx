@@ -324,10 +324,11 @@ export const TopologyPanel: React.FC<Props> = (props) => {
           ...n.data, status, color, searchQuery, showIp,
           statusCause: cause, statusDetail: detail,
           fontScale: options.fontScale ?? 1,
+          iconColorMode: options.iconColorMode ?? DEFAULT_OPTIONS.iconColorMode,
         } as any,
       };
     }),
-    [topology, nodeLive, searchQuery, options.fontScale, showIp]
+    [topology, nodeLive, searchQuery, options.fontScale, showIp, options.iconColorMode]
   );
 
   // Arestas: aplica binding de up/down/speed e IP das séries
