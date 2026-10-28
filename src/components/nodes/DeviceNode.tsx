@@ -6,6 +6,8 @@ import { Handle, Position, NodeProps, NodeResizer } from '@xyflow/react';
 import { DeviceNodeData } from '../../types';
 import { getDeviceIcon } from '../../icons';
 import { useEditor } from '../EditorContext';
+import { useCopiado } from '../useCopiado';
+import { paletteFor, effectiveBg, readableOn, ensureContrast } from '../../utils/theme';
 
 interface Props extends NodeProps {
   data: DeviceNodeData;
@@ -29,7 +31,15 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
   // Escala da fonte do painel (opção "Escala da fonte" p/ TV de NOC):
   // textos escalam via em; ícone e badge usam px e precisam multiplicar.
   const fontScale = (data as any).fontScale ?? 1;
-  const { editMode, setNodeData, openTest } = useEditor();
+  const { editMode, setNodeData, openTest, theme, publicMode } = useEditor();
+  // Modo público fora do editor: nada de IP, causa, link ou teste
+  const publico = !!publicMode && !editMode;
+  const pal = paletteFor(theme);
+  // Rótulo e IP pela cor do fundo REAL do nó. Fixos em branco, sumiam em nó
+  // de fundo transparente no tema claro (1,05:1) e em fundo claro escolhido
+  // pelo usuário nos dois temas.
+  const fundoReal = effectiveBg(bgColor ?? pal.nodeBg, pal.canvas);
+  const legivel = readableOn(fundoReal);
 
   // Hover no nó (modo visualização) → mostra o botão 🌐 de testes de rede
   const [hovered, setHovered] = React.useState(false);
@@ -58,19 +68,17 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
   const effHeight = liveSize.h ?? nodeHeight;
 
   const handleNodeClick = (e: React.MouseEvent) => {
-    if (!editMode && linkUrl && isSafeUrl(linkUrl)) {
+    if (!editMode && !publico && linkUrl && isSafeUrl(linkUrl)) {
       e.stopPropagation();
       // noopener,noreferrer: a página aberta não recebe window.opener nem o Referer
       window.open(linkUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
-  const [copied, setCopied] = React.useState(false);
+  const [copied, copiar] = useCopiado<true>();
   const handleCopy = () => {
     if (!ip) return;
-    navigator.clipboard.writeText(ip);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    copiar(ip, true);
   };
 
   const hasSearch = !!searchQuery;
@@ -85,9 +93,9 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
 
   const borderColor =
     selected ? '#3b82f6' :
-    status === 'down' ? '#ef4444' :
-    status === 'warning' ? '#f59e0b' :
-    'transparent';
+    status === 'down' ? pal.line.down :
+    status === 'warning' ? pal.line.warning :
+    pal.nodeBorder;
 
   return (
     <div
@@ -97,7 +105,7 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
       // Por que está nessa cor: "sem coleta há 12 min" e "série não encontrada"
       // exigem reações opostas (técnico vs revisar binding) e sem isso o
       // operador só vê vermelho.
-      title={statusDetail || undefined}
+      title={publico ? undefined : statusDetail || undefined}
       style={{
         opacity: nodeOpacity,
         display: 'flex',
@@ -105,9 +113,9 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
         alignItems: 'center',
         padding: '8px 12px',
         borderRadius: borderRadius ?? 8,
-        background: bgColor ?? 'rgba(15, 23, 42, 0.85)',
+        background: bgColor ?? pal.nodeBg,
         border: `2px solid ${borderColor}`,
-        boxShadow: status === 'down' ? '0 0 12px rgba(239,68,68,0.6)' : '0 2px 8px rgba(0,0,0,0.4)',
+        boxShadow: status === 'down' ? '0 0 12px rgba(239,68,68,0.6)' : `0 2px 8px ${pal.shadow}`,
         minWidth: effWidth ?? 90,
         width: effWidth ? '100%' : 'auto',
         minHeight: effHeight,
@@ -116,12 +124,12 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
         transition: 'box-shadow 200ms, border-color 200ms, background 200ms, border-radius 200ms',
         position: 'relative',
         justifyContent: 'center',
-        cursor: (!editMode && linkUrl) ? 'pointer' : undefined,
+        cursor: (!editMode && !publico && linkUrl) ? 'pointer' : undefined,
       }}
     >
       {/* Botão de testes de rede: aparece no hover (modo visualização).
           Convive com o clique esquerdo (linkUrl) e o botão direito. */}
-      {!editMode && hovered && (
+      {!editMode && !publico && hovered && openTest && (
         <button
           onClick={(e) => {
             e.stopPropagation(); // não disparar o linkUrl do nó
@@ -199,11 +207,12 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
               height: Math.round(12 * fontScale),
               borderRadius: '50%',
               background:
-                status === 'up' ? '#22c55e' :
-                status === 'warning' ? '#f59e0b' :
-                '#ef4444',
-              border: '2px solid #0f172a',
-              boxShadow: status === 'down' ? '0 0 6px #ef4444' : 'none',
+                status === 'up' ? pal.line.up :
+                status === 'warning' ? pal.line.warning :
+                pal.line.down,
+              // Recorte na cor do fundo do nó: separa o ponto do ícone nos dois temas.
+              border: `2px solid ${fundoReal}`,
+              boxShadow: status === 'down' ? `0 0 6px ${pal.line.down}` : 'none',
             }}
           />
         )}
@@ -212,7 +221,7 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
       <div
         style={{
           marginTop: 4,
-          color: '#f1f5f9',
+          color: legivel.text,
           fontSize: '0.9em',
           fontWeight: 600,
           textAlign: 'center',
@@ -228,19 +237,28 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
           ENCOLHE, e como as arestas saem do centro do nó, o mapa inteiro se
           desloca ao ligar/desligar o botão. Ocupando o espaço vazio, o layout
           que o usuário posicionou à mão fica idêntico nos dois estados. */}
-      {ip && (
+      {/* Modo público: o IP nem vai pro HTML (aqui o visibility:hidden não
+          basta — o texto continuaria lá). No lugar, zeros do MESMO tamanho
+          (fonte monoespaçada, espaços nos mesmos pontos): o nó fica com a
+          largura e a altura do mapa interno. Só a altura não bastava — o IP
+          costuma ser mais largo que o nome, o nó encolhia, as âncoras (fração
+          do tamanho do nó) andavam e as rotas manuais entortavam. */}
+      {ip && publico && (
+        <div aria-hidden style={{ ...linhaIp(ip), visibility: 'hidden' }}>
+          {ip.replace(/\S/g, '0')}
+        </div>
+      )}
+      {ip && !publico && (
         <div
           onClick={showIp === false ? undefined : handleCopy}
           title={showIp === false ? undefined : 'Clique para copiar o IP'}
           aria-hidden={showIp === false}
           style={{
+            ...linhaIp(ip),
             visibility: showIp === false ? 'hidden' : 'visible',
-            color: copied ? '#4ade80' : '#94a3b8',
-            fontSize: '0.75em',
-            fontFamily: 'monospace',
+            color: copied ? ensureContrast(pal.ok, fundoReal, 4.5) : legivel.muted,
             cursor: 'pointer',
             background: copied ? 'rgba(74, 222, 128, 0.1)' : 'transparent',
-            padding: '2px 4px',
             borderRadius: 4,
             transition: 'all 0.2s',
           }}
@@ -251,6 +269,21 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
     </div>
   );
 };
+
+/** A linha do IP com LARGURA FIXA por caractere, em vez da largura que a
+ *  fonte der. O IP costuma ser o que define a largura do nó, e a fonte
+ *  monoespaçada muda de sistema pra sistema: 0,55 em por letra no Windows
+ *  (Consolas), 0,6 no Android e no Linux. Nó mais largo → as âncoras (fração
+ *  do tamanho do nó) andam → as rotas desenhadas no Windows entortavam no
+ *  celular e na TV. 0,55 em é a medida da Consolas, onde os mapas são
+ *  montados: lá nada muda, e os outros passam a ver igual. Também segura o
+ *  "Copiado!" (mais curto que o IP) sem o nó encolher por um instante. */
+function linhaIp(ip: string): React.CSSProperties {
+  return {
+    width: `${ip.length * 0.55}em`, fontSize: '0.75em', fontFamily: 'monospace',
+    padding: '2px 4px', whiteSpace: 'nowrap', textAlign: 'center',
+  };
+}
 
 const edgeHStyle: React.CSSProperties = {
   width: 14,

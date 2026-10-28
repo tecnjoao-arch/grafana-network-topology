@@ -1,0 +1,2 @@
+# Scripts de shell rodam no servidor Linux: sempre LF, nunca CRLF.
+*.sh text eol=lf

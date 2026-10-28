@@ -9,8 +9,52 @@
 // regras abaixo existem para que "não sei" e "está bom" nunca se pareçam.
 
 import { DataFrame } from '@grafana/data';
-import { DeviceNodeData, LinkStatus, StatusCause, StatusOperator } from '../types';
+import { DeviceNodeData, LinkStatus, StatusCause, StatusOperator, ValueMapping } from '../types';
 import { BindingResult, resolveBindingDetailed } from './dataBinding';
+
+/** A regra que casa com o valor medido. Número com número ("1" casa 1 e
+ *  1.0); texto com texto, sem diferenciar maiúscula. Regra com valor vazio
+ *  (ainda sendo digitada) não casa nada. */
+export function matchRule<T extends { value: string }>(value: number | string | undefined, rules: T[]): T | undefined {
+  if (value === undefined || value === null) return undefined;
+  const vs = String(value).trim().toLowerCase();
+  const vn = Number(vs);
+  return rules.find((r) => {
+    const rs = String(r.value ?? '').trim().toLowerCase();
+    if (rs === '') return false;
+    const rn = Number(rs);
+    return vs !== '' && !isNaN(rn) && !isNaN(vn) ? rn === vn : rs === vs;
+  });
+}
+
+/** As cores prontas das regras (de nó e de link) e o que cada uma significa.
+ *  Editores e mapa leem daqui: o quadradinho que o usuário clica é a mesma
+ *  decisão que o mapa toma. Vermelho é queda: derruba o link (causa,
+ *  aparência do DOWN) e, no nó, apaga os links dele. */
+export const CORES_DE_REGRA: Array<{ color: string; status: LinkStatus; nome: string }> = [
+  { color: '#22c55e', status: 'up', nome: 'Verde — no ar' },
+  { color: '#3b82f6', status: 'up', nome: 'Azul — no ar' },
+  { color: '#22d3ee', status: 'up', nome: 'Ciano — no ar' },
+  { color: '#a855f7', status: 'up', nome: 'Roxo — no ar' },
+  { color: '#f59e0b', status: 'warning', nome: 'Âmbar — alerta' },
+  { color: '#f97316', status: 'warning', nome: 'Laranja — alerta' },
+  { color: '#ef4444', status: 'down', nome: 'Vermelho — queda' },
+  { color: '#64748b', status: 'unknown', nome: 'Cinza — sem status' },
+];
+
+/** Cinzas que já estavam em regras salvas: pelo matiz o #94a3b8 contaria como
+ *  "no ar" (é levemente azulado), mas foi escolhido como cinza. */
+const CINZAS_ANTIGOS = ['#94a3b8', '#9ca3af', '#6b7280'];
+
+/** O que a cor de uma regra (de nó ou de link) significa: a das cores prontas
+ *  quando é uma delas; senão, pelo matiz (statusFromColor). */
+export function statusDaCorDeRegra(color: string): LinkStatus {
+  const c = String(color ?? '').trim().toLowerCase();
+  const pronta = CORES_DE_REGRA.find((x) => x.color === c);
+  if (pronta) return pronta.status;
+  if (CINZAS_ANTIGOS.includes(c)) return 'unknown';
+  return statusFromColor(c);
+}
 
 /** Avalia a regra "valor <op> alvo" → up/down. Sem valor → unknown. */
 export function evaluateStatus(
@@ -68,6 +112,9 @@ export interface StatusOutcome {
   cause?: StatusCause;
   /** Frase pronta pra tela ("Equipamento sem resposta") */
   detail?: string;
+  /** Link: a regra (valor → cor) que decidiu. Ausente = decidiu a regra de
+   *  leitura, e a cor é a do tema pro status. */
+  rule?: ValueMapping;
 }
 
 /** Nó sem binding mantém o status salvo, que pode ser ausente — por isso
@@ -101,9 +148,7 @@ export function resolveNodeStatus(
 
   if (data.colorMappings && data.colorMappings.length > 0) {
     const liveStr = String(r.value).trim().toLowerCase();
-    const matched = data.colorMappings.find(
-      (m) => String(m.value).trim().toLowerCase() === liveStr
-    );
+    const matched = matchRule(r.value, data.colorMappings);
     if (!matched) {
       return { status: 'unknown', color: data.color, cause: 'nao-configurado', detail: 'Valor sem regra correspondente' };
     }
@@ -111,8 +156,9 @@ export function resolveNodeStatus(
     // marcava o nó como 'up', inclusive "0 → vermelho": o ícone só parecia
     // caído porque herdava a cor, e o status seguia 'up' — sem derrubar os
     // links, sem causa, sem amortecimento. Com o ícone colorido pelo status,
-    // isso viraria um roteador caído pintado de azul.
-    const status = statusFromColor(matched.color);
+    // isso viraria um roteador caído pintado de azul. Casamento e cor são
+    // lidos como nas regras de link (matchRule, statusDaCorDeRegra).
+    const status = statusDaCorDeRegra(matched.color);
     return {
       status,
       color: data.color,
@@ -185,8 +231,24 @@ export interface LinkStatusInput {
   sides: SideStatus[];
   operator?: StatusOperator;
   value?: number;
+  /** Regras valor → cor sobre os lados A/B. A cor da regra que casa diz o
+   *  significado; valor sem regra segue operator/value. */
+  rules?: ValueMapping[];
   /** Maior tráfego FRESCO do link (undefined/0 = sem prova de vida) */
   freshTraffic?: number;
+}
+
+interface Leitura {
+  status: LinkStatus;
+  /** A regra que casou (ausente = decidiu a regra de leitura) */
+  rule?: ValueMapping;
+}
+
+/** Um lado medido: pela regra do valor quando há, senão pela regra de leitura. */
+function lerLado(value: number | undefined, i: LinkStatusInput): Leitura {
+  const r = i.rules && i.rules.length > 0 ? matchRule(value, i.rules) : undefined;
+  if (r) return { status: statusDaCorDeRegra(r.color), rule: r };
+  return { status: evaluateStatus(value, i.operator, i.value) };
 }
 
 /** Status de um link, com a causa. Precedência (a primeira que casa vence):
@@ -194,8 +256,10 @@ export interface LinkStatusInput {
  *   2. equipamento da ponta down    → down    (causa raiz ganha das demais)
  *   3. operStatus medido como down  → down    (mais específico que "sem coleta")
  *   4. operStatus sem valor         → down    (parou de coletar / série sumiu)
- *   5. sem operStatus + tráfego     → up      (inferido; bits frescos são prova)
- *   6. nada configurado             → unknown (nunca verde por omissão)
+ *   5. operStatus medido em alerta  → warning (regra âmbar/laranja)
+ *   6. regra cinza ("sem status")   → unknown
+ *   7. sem operStatus + tráfego     → up      (inferido; bits frescos são prova)
+ *   8. nada configurado             → unknown (nunca verde por omissão)
  *  Tráfego NÃO promove status quando há operStatus: durante um incidente o
  *  número pode estar velho ou vir do lado vizinho, e foi assim que link caído
  *  apareceu verde "com tráfego passando". */
@@ -209,10 +273,15 @@ export function resolveLinkStatus(i: LinkStatusInput): StatusOutcome {
   }
 
   if (i.sides.length > 0) {
+    const lidos = i.sides.map((s) => ({
+      s,
+      l: s.result.state === 'ok' ? lerLado(s.result.value, i) : undefined,
+      v: s.result.value === undefined ? '' : ` = ${s.result.value}`,
+    }));
     // Medido como down primeiro: é informação mais precisa que ausência
-    for (const s of i.sides) {
-      if (s.result.state === 'ok' && evaluateStatus(s.result.value, i.operator, i.value) === 'down') {
-        return { status: 'down', cause: 'iface', detail: `Interface down (${s.label})` };
+    for (const { s, l, v } of lidos) {
+      if (l?.status === 'down') {
+        return { status: 'down', cause: 'iface', detail: `Interface down (${s.label}${v})`, rule: l.rule };
       }
     }
     for (const s of i.sides) {
@@ -231,7 +300,17 @@ export function resolveLinkStatus(i: LinkStatusInput): StatusOutcome {
         };
       }
     }
-    return { status: 'up' };
+    for (const { s, l, v } of lidos) {
+      if (l?.status === 'warning') {
+        return { status: 'warning', cause: 'iface', detail: `Alerta (${s.label}${v})`, rule: l.rule };
+      }
+    }
+    for (const { s, l, v } of lidos) {
+      if (l?.status === 'unknown') {
+        return { status: 'unknown', cause: 'iface', detail: `Sem status (${s.label}${v})`, rule: l.rule };
+      }
+    }
+    return { status: 'up', rule: lidos.find((x) => x.l?.rule)?.l?.rule };
   }
 
   // Sem operStatus em lado nenhum: bits frescos passando provam que o link vive.

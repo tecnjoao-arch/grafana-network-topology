@@ -173,7 +173,12 @@ export interface LinkEdgeData {
   lineStyle?: LineStyle;
   /** Animação da linha */
   animation?: LineAnimation;
-  /** Regras de mapeamento estilo Flowcharting (Valor -> Cor/Animação) */
+  /** Regras valor → cor (+ traçado/animação), lidas sobre o status dos lados
+   *  A/B. A cor diz também o que o valor significa (vermelho = queda, âmbar =
+   *  alerta, cinza = sem status, as demais = no ar — ver CORES_DE_REGRA);
+   *  valor sem regra segue a regra de leitura (statusOperator/statusValue).
+   *  FORMATO ANTIGO: com `statusBinding` preenchido, as regras leem aquela
+   *  métrica e só pintam a linha, sem decidir status. */
   colorMappings?: ValueMapping[];
   /** Formato de curva da linha */
   pathType?: PathType;
@@ -324,17 +329,24 @@ export interface NetworkTopology {
 /** Opções do painel (persistidas no JSON do Grafana) */
 export interface PanelOptions {
   topology: NetworkTopology;
-  /** Tema visual: dark = ideal pra NOC TV; light = telas comuns */
-  theme: 'dark' | 'light';
-  /** Escala da fonte (1 = padrão, 1.5 = 50% maior — útil pra TVs grandes) */
+  /** Tema visual: auto = segue o do Grafana (troca junto com ele); dark =
+   *  sempre escuro, ideal pra NOC TV; light = sempre claro. Ausente = auto. */
+  theme: 'auto' | 'dark' | 'light';
+  /** Escala da fonte (1 = padrão, 1.5 = 50% maior — útil pra TVs grandes).
+   *  Aumenta também os equipamentos — e as rotas manuais saem das bordas
+   *  deles, então elas entortam. Para só deixar os cards legíveis: cardScale. */
   fontScale: number;
+  /** Escala só dos cards de tráfego, multiplicada pela da fonte. Card não é
+   *  ponta de linha: aumentar não mexe nas rotas. Ausente = 1. */
+  cardScale?: number;
   /** Mostrar minimap no canto */
   showMinimap: boolean;
   /** Ajustar zoom automaticamente ao tamanho do container */
   fitView: boolean;
   /** Animar as arestas (luz correndo no cabo) */
   animateLinks: boolean;
-  /** Modo edição: permite arrastar nós e salva a posição */
+  /** Modo edição: permite arrastar nós e salva a posição. Só tem efeito com o
+   *  painel aberto no editor do Grafana (ver utils/panelEditor). */
   editMode: boolean;
   /** Mostrar legenda de cores no canto */
   showLegend: boolean;
@@ -360,6 +372,10 @@ export interface PanelOptions {
   /** Token do Globalping (opcional): aumenta a cota dos testes de rede.
    *  Atenção: fica visível no JSON do dashboard (risco baixo — só controla cota). */
   globalpingToken?: string;
+  /** Modo público: só tráfego, status (cor da linha) e capacidade. Sem IP,
+   *  nome de interface, causa do status, botões, testes de rede, links e
+   *  nada que abra ao clicar — pra cópia do mapa que vai pra internet. */
+  publicMode?: boolean;
 }
 
 export const DEFAULT_OPTIONS: PanelOptions = {
@@ -369,8 +385,9 @@ export const DEFAULT_OPTIONS: PanelOptions = {
     edges: [],
     customImages: [],
   },
-  theme: 'dark',
+  theme: 'auto',
   fontScale: 1,
+  cardScale: 1,
   showMinimap: false,
   fitView: true,
   animateLinks: true,
@@ -385,6 +402,7 @@ export const DEFAULT_OPTIONS: PanelOptions = {
   downConfirmCycles: 3,
   iconColorMode: 'c',
   globalpingToken: '',
+  publicMode: false,
 };
 
 

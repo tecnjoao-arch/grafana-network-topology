@@ -115,6 +115,7 @@ interface IndexedField {
   isNumber: boolean;
   field: Field;
   timeField?: Field;
+  frameName: string;
 }
 
 interface SeriesIndex {
@@ -152,6 +153,7 @@ function getIndex(series: DataFrame[]): SeriesIndex {
         isNumber: field.type === 'number',
         field,
         timeField,
+        frameName: frame.name ?? '',
       });
     }
   }
@@ -160,16 +162,62 @@ function getIndex(series: DataFrame[]): SeriesIndex {
   return idx;
 }
 
+/** Regex com quantificador aninhado — "(a+)+", "(\w+\s?)*", "(a|aa)+",
+ *  "(.*x){9}" — faz o motor do navegador testar caminhos em quantidade
+ *  exponencial: contra ~2000 séries, a cada atualização, trava a aba. E como o
+ *  binding fica salvo no dashboard, trava para todo mundo que abrir.
+ *  Heurística conservadora: grupo quantificado que tenha quantificador ou "|"
+ *  dentro é arriscado. Os usos reais ("HOST.*bits received", "^HOST: ICMP
+ *  ping$", "(Gi0/0/1|Te0/0/1)", "Rx Power (dBm)") passam. */
+export function regexArriscada(padrao: string): boolean {
+  // Um item por grupo aberto: o corpo dele já tem quantificador ou "|"?
+  const grupos: boolean[] = [];
+  const marca = () => {
+    if (grupos.length) grupos[grupos.length - 1] = true;
+  };
+  // Fora da string vem undefined, e '...'.includes('') daria true
+  const em = (c: string | undefined, conjunto: string) => c !== undefined && conjunto.includes(c);
+  let classe = false; // dentro de [...], nada é quantificador
+  for (let i = 0; i < padrao.length; i++) {
+    const c = padrao[i];
+    if (c === '\\') {
+      i++; // o caractere escapado é literal
+    } else if (classe) {
+      classe = c !== ']';
+    } else if (c === '[') {
+      classe = true;
+    } else if (c === '(') {
+      grupos.push(false);
+    } else if (c === ')') {
+      const corpo = grupos.pop() ?? false;
+      const quantificado = em(padrao[i + 1], '*+?{');
+      if (corpo && quantificado) return true;
+      if (corpo || quantificado) marca();
+    } else if (em(c, '*+{|')) {
+      marca();
+    } else if (c === '?' && !em(padrao[i - 1], '(*+?}')) {
+      marca(); // "a?" quantifica; "(?:", "(?=" e o lazy "*?" não
+    }
+  }
+  return false;
+}
+
+/** A regex do binding — ou null quando o texto não é regex válida ou é
+ *  arriscada; aí vale só o casamento por texto. */
+export function regexDoBinding(match: string): RegExp | null {
+  if (regexArriscada(match)) return null;
+  try {
+    return new RegExp(match, 'i');
+  } catch {
+    return null; // match inválido como regex → só substring
+  }
+}
+
 /** Matcher: substring literal PRIMEIRO, regex como fallback. Nomes de itens do
  *  Zabbix costumam conter parênteses (ex: "Rx Power (dBm)"), que como regex
  *  viram grupos e nunca casam — colar o nome exato da série sempre funciona. */
 function makeMatcher(match: string): (f: IndexedField) => boolean {
-  let re: RegExp | null = null;
-  try {
-    re = new RegExp(match, 'i');
-  } catch {
-    re = null; // match inválido como regex → só substring
-  }
+  const re = regexDoBinding(match);
   const lowerMatch = match.toLowerCase();
   const stable = stableMatch(match).toLowerCase();
   // Rede de segurança: quando o texto salvo é o identificador INTEIRO de um
@@ -326,6 +374,47 @@ export function resolveBindingSeries(series: DataFrame[], binding?: MetricBindin
       out = { times, values };
       break;
     }
+  }
+
+  idx.results.set(cacheKey, out);
+  return out;
+}
+
+/** A série que um binding casa, como o datasource a nomeou. */
+export interface BindingIdentity {
+  /** Nomes do item, na ordem de confiança ("HOST: Interface X(desc): Bits
+   *  received"): o do campo e, quando difere, o do frame. */
+  names: string[];
+  /** Label host do campo — o backend do Zabbix põe em cada série. */
+  host?: string;
+  /** Query que trouxe a série. */
+  refId: string;
+}
+
+/** Qual série o binding casa — não o valor, a identidade. O texto salvo no
+ *  binding pode ser só um pedaço do nome (ou uma regex); quem precisa saber
+ *  QUAL interface está sendo medida (o cartão do link) precisa do nome
+ *  inteiro, com host. Mesmo critério de casamento do resolveBindingSeries. */
+export function resolveBindingIdentity(series: DataFrame[], binding?: MetricBinding): BindingIdentity | undefined {
+  if (!binding || !binding.match || series.length === 0) return undefined;
+
+  const idx = getIndex(series);
+  const cacheKey = `i|${binding.query ?? ''}|${binding.match}`;
+  if (idx.results.has(cacheKey)) return idx.results.get(cacheKey) as BindingIdentity | undefined;
+
+  const matches = makeMatcher(binding.match);
+  let out: BindingIdentity | undefined = undefined;
+
+  for (const f of idx.fields) {
+    if (!f.isNumber) continue;
+    if (binding.query && f.refId !== binding.query) continue;
+    if (!matches(f)) continue;
+    // Mesma ordem do leitor do cartão (extrairLinks): o nome do campo e, se
+    // ele não servir (em modo Text o campo se chama só "Value"), o do frame.
+    const dn = (f.field.config as any)?.displayNameFromDS as string | undefined;
+    const names = Array.from(new Set([dn || f.field.name || f.frameName, f.frameName].filter(Boolean)));
+    out = { names, host: f.field.labels?.host, refId: f.refId };
+    break;
   }
 
   idx.results.set(cacheKey, out);

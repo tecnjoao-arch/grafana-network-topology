@@ -4,6 +4,7 @@
 import React from 'react';
 import { BindingSeries } from '../utils/dataBinding';
 import { niceCeil, fmtAxisBps } from '../utils/format';
+import { Palette, paletteFor } from '../utils/theme';
 
 export const Sparkline: React.FC<{
   inbound?: BindingSeries;
@@ -11,7 +12,8 @@ export const Sparkline: React.FC<{
   w?: number;
   h?: number;
   axis?: boolean;
-}> = ({ inbound, outbound, w = 210, h = 46, axis = false }) => {
+  pal?: Palette;
+}> = ({ inbound, outbound, w = 210, h = 46, axis = false, pal = paletteFor('dark') }) => {
   const all = [...(inbound?.values ?? []), ...(outbound?.values ?? [])];
   if (all.length === 0) return null;
   const tAll = [...(inbound?.times ?? []), ...(outbound?.times ?? [])];
@@ -42,15 +44,15 @@ export const Sparkline: React.FC<{
         const y = py(yv);
         return (
           <g key={f}>
-            <line x1={PL} x2={w - PR} y1={y} y2={y} stroke="rgba(255,255,255,0.07)" vectorEffect="non-scaling-stroke" />
-            <text x={PL - 4} y={y + 3} textAnchor="end" fontSize={8.5} fill="#64748b" fontFamily="monospace">{fmtAxisBps(yv)}</text>
+            <line x1={PL} x2={w - PR} y1={y} y2={y} stroke={pal.divider} vectorEffect="non-scaling-stroke" />
+            <text x={PL - 4} y={y + 3} textAnchor="end" fontSize={9} fill={pal.textMuted} fontFamily="monospace">{fmtAxisBps(yv)}</text>
           </g>
         );
       })}
       {/* Mesma leitura do modal: só o inbound preenchido, outbound só linha. */}
-      {inbound && <path d={area(inbound)} fill="rgba(34,197,94,0.18)" />}
-      {inbound && <path d={line(inbound)} fill="none" stroke="#22c55e" strokeWidth={2.2} vectorEffect="non-scaling-stroke" />}
-      {outbound && <path d={line(outbound)} fill="none" stroke="#3b82f6" strokeWidth={2.2} vectorEffect="non-scaling-stroke" />}
+      {inbound && <path d={area(inbound)} fill={pal.inbound} fillOpacity={0.18} />}
+      {inbound && <path d={line(inbound)} fill="none" stroke={pal.inbound} strokeWidth={2.2} vectorEffect="non-scaling-stroke" />}
+      {outbound && <path d={line(outbound)} fill="none" stroke={pal.outbound} strokeWidth={2.2} vectorEffect="non-scaling-stroke" />}
     </svg>
   );
 };

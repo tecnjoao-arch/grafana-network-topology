@@ -20,7 +20,8 @@ export interface GpResultItem {
   result: {
     status: 'in-progress' | 'finished' | 'failed' | 'offline';
     rawOutput?: string;
-    stats?: { min?: number; avg?: number; max?: number; loss?: number; total?: number; rcv?: number; drop?: number };
+    // Na API, min/avg/max vêm null quando nenhum pacote volta (spec.yaml: NullableNumber)
+    stats?: { min?: number | null; avg?: number | null; max?: number | null; loss?: number | null; total?: number | null; rcv?: number | null; drop?: number | null };
     resolvedAddress?: string | null;
   };
 }

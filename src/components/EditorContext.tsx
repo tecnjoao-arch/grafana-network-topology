@@ -2,11 +2,16 @@
 
 import React, { createContext, useContext } from 'react';
 import { LinkEdgeData } from '../types';
+import { PanelTheme } from '../utils/theme';
 
 type Anchor = { x: number; y: number };
 
 interface EditorCtx {
   editMode: boolean;
+  /** Tema do painel: nós e arestas escolhem a paleta por ele (utils/theme) */
+  theme?: PanelTheme;
+  /** Modo público: nós e cards escondem IP, nome de interface e causa */
+  publicMode?: boolean;
   /** Substitui os waypoints de uma aresta e persiste nas options */
   setEdgeWaypoints: (edgeId: string, waypoints: Anchor[]) => void;
   /** Define a âncora de origem/destino de uma aresta (fração 0..1 do nó) */

@@ -97,7 +97,7 @@ export const NetworkTestModal: React.FC<Props> = ({ initialTarget = '', token, o
         }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>🌐 Testes de rede</div>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
               probes externas via Globalping — visão de fora da sua rede
             </div>
           </div>
@@ -113,9 +113,10 @@ export const NetworkTestModal: React.FC<Props> = ({ initialTarget = '', token, o
                 onClick={() => setType(t.v)}
                 style={{
                   ...chip,
-                  background: type === t.v ? '#3b82f6' : '#1e293b',
+                  // #2563eb e não #3b82f6: branco no azul mais claro dava 3,7:1
+                  background: type === t.v ? '#2563eb' : '#1e293b',
                   color: type === t.v ? '#fff' : '#cbd5e1',
-                  borderColor: type === t.v ? '#3b82f6' : '#334155',
+                  borderColor: type === t.v ? '#2563eb' : '#334155',
                 }}
               >
                 {t.label}
@@ -139,7 +140,7 @@ export const NetworkTestModal: React.FC<Props> = ({ initialTarget = '', token, o
               disabled={running || !target.trim()}
               style={{
                 background: running ? '#1e293b' : '#22c55e',
-                color: running ? '#64748b' : '#052e16',
+                color: running ? '#94a3b8' : '#052e16',
                 border: 'none', borderRadius: 6, padding: '8px 18px',
                 fontWeight: 700, fontSize: 13, cursor: running ? 'default' : 'pointer',
                 whiteSpace: 'nowrap',
@@ -151,7 +152,7 @@ export const NetworkTestModal: React.FC<Props> = ({ initialTarget = '', token, o
 
           {/* Origem das probes + quantidade */}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Origem:</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>Origem:</span>
             {ORIGINS.map((o) => (
               <button
                 key={o.magic}
@@ -175,7 +176,7 @@ export const NetworkTestModal: React.FC<Props> = ({ initialTarget = '', token, o
               style={{ ...inputText, width: 150, padding: '4px 8px', fontSize: 11 }}
               title="Origem livre: cidade, país, continente ou ASN (ex: AS1916)"
             />
-            <span style={{ fontSize: 11, color: '#64748b', marginLeft: 6 }}>Probes:</span>
+            <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>Probes:</span>
             <select
               value={limit}
               onChange={(e) => setLimit(Number(e.target.value))}
@@ -198,7 +199,7 @@ export const NetworkTestModal: React.FC<Props> = ({ initialTarget = '', token, o
           {/* Resultados */}
           {meas && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ fontSize: 11, color: '#64748b' }}>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>
                 {meas.status === 'finished' ? '✅ Concluído' : '⏳ Executando'} — {meas.type} → <span style={{ color: '#22d3ee', fontFamily: 'monospace' }}>{meas.target}</span> ({meas.probesCount} probe{meas.probesCount > 1 ? 's' : ''})
               </div>
               {meas.results.map((r, i) => <ProbeResult key={i} item={r} />)}
@@ -207,7 +208,7 @@ export const NetworkTestModal: React.FC<Props> = ({ initialTarget = '', token, o
 
           {/* Rodapé: cota */}
           {rate?.remaining !== undefined && (
-            <div style={{ fontSize: 10, color: '#475569', marginTop: 12, textAlign: 'right' }}>
+            <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 12, textAlign: 'right' }}>
               cota: restam {rate.remaining}/{rate.limit ?? 250} testes nesta hora (por IP)
             </div>
           )}
@@ -227,7 +228,7 @@ const ProbeResult: React.FC<{ item: GpResultItem }> = ({ item }) => {
   const statusColor =
     r.status === 'finished' ? '#22c55e' :
     r.status === 'failed' ? '#ef4444' :
-    r.status === 'offline' ? '#64748b' : '#f59e0b';
+    r.status === 'offline' ? '#94a3b8' : '#f59e0b';
 
   return (
     <div style={{ background: '#0b1220', border: '1px solid #1e293b', borderRadius: 8, overflow: 'hidden' }}>
@@ -236,15 +237,18 @@ const ProbeResult: React.FC<{ item: GpResultItem }> = ({ item }) => {
         padding: '6px 10px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid #1e293b',
       }}>
         <span style={{ fontSize: 12, fontWeight: 600 }}>
-          📍 {where || 'probe'} <span style={{ color: '#64748b', fontWeight: 400, fontSize: 11 }}>· {net}</span>
+          📍 {where || 'probe'} <span style={{ color: '#94a3b8', fontWeight: 400, fontSize: 11 }}>· {net}</span>
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {r.stats?.avg !== undefined && (
+          {r.status === 'finished' && (r.stats?.rcv === 0 || r.stats?.loss === 100) && (
+            <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#ef4444' }}>sem resposta</span>
+          )}
+          {typeof r.stats?.avg === 'number' && (
             <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#22d3ee' }}>
               avg {r.stats.avg.toFixed(1)} ms
             </span>
           )}
-          {r.stats?.loss !== undefined && (
+          {typeof r.stats?.loss === 'number' && (
             <span style={{ fontSize: 11, fontFamily: 'monospace', color: r.stats.loss > 0 ? '#ef4444' : '#22c55e' }}>
               perda {r.stats.loss}%
             </span>

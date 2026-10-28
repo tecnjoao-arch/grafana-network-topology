@@ -6,15 +6,19 @@ import { createPortal } from 'react-dom';
 import {
   LinkEdgeData, LineStyle, LineAnimation, LINE_STYLES, LINE_ANIMATIONS,
   PathType, PATH_TYPES, LabelFooter, LABEL_FOOTERS,
-  OPTIC_KEYS, OpticKey, ModuleInfoBindings, CardsSide,
+  OPTIC_KEYS, OpticKey, ModuleInfoBindings, CardsSide, ValueMapping,
 } from '../types';
 import { MetricBinding, Aggregation } from '../utils/dataBinding';
 import { discoverInterfaces, discoveryReport, DiscoveredInterface } from '../utils/discovery';
+import { CorDaRegra } from './CorDaRegra';
 import { SeriesCombo } from './SeriesCombo';
 
 interface Props {
   edgeId: string;
+  /** O que está SALVO no link (não o estado ao vivo do mapa) */
   data: LinkEdgeData;
+  /** Capacidade em uso agora (binding resolvido ou fixa) — só a dica do campo */
+  liveSpeed?: number;
   sourceLabel: string;
   targetLabel: string;
   seriesKeys: string[];
@@ -79,14 +83,20 @@ const MODULE_LABEL: Record<keyof ModuleInfoBindings, string> = {
   mediaType: 'Media Type',
 };
 
-export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, seriesKeys, onChange, onDelete, onClose }) => {
+export const EdgeEditor: React.FC<Props> = ({ data, liveSpeed, sourceLabel, targetLabel, seriesKeys, onChange, onDelete, onClose }) => {
   const color = data.color ?? '#22c55e';
   const [showSeries, setShowSeries] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   // Texto da capacidade fixa (só grava quando o usuário digita)
   const [speedText, setSpeedText] = useState('');
-  // Thresholds ativos = cor/animação manuais viram só reserva (quando nenhuma regra casa)
-  const thresholdsActive = !!(data.statusBinding?.match && (data.colorMappings?.length ?? 0) > 0);
+  const regras = data.colorMappings ?? [];
+  // Métrica própria do link inteiro SEM regras: no mapa ela conta como status
+  // (formato antigo) — aparece junto dos lados A/B.
+  const statusAntigo = !!data.statusBinding?.match && regras.length === 0;
+  // Com regras, a cor da linha vem delas: a "Cor da linha" vira reserva. A
+  // animação, só quando a regra define uma (no formato antigo, sempre).
+  const corReserva = regras.length > 0;
+  const animReserva = (regras.length > 0 && !!data.statusBinding?.match) || regras.some((r) => !!r.animation);
 
   // Interfaces detectadas no datasource → auto-preenchimento de um lado inteiro
   const interfaces = useMemo(() => discoverInterfaces(seriesKeys), [seriesKeys]);
@@ -145,6 +155,8 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
     // caída apareceria verde.
     if (m.status) {
       patch[side === 'source' ? 'sourceStatusBinding' : 'targetStatusBinding'] = bind(m.status);
+      // Já fixa a regra do ifOperStatus (1=up): no operador padrão '>' 0, o
+      // valor 2 seria lido como UP — interface caída apareceria verde.
       if (data.statusOperator === undefined) {
         patch.statusOperator = '==';
         patch.statusValue = 1;
@@ -248,21 +260,21 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
       </div>
 
       <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {/* Aviso: thresholds mandam na cor/animação */}
-        {thresholdsActive && (
+        {/* Aviso: as regras mandam na cor */}
+        {corReserva && (
           <div style={{
             background: 'rgba(59,130,246,0.08)', border: '1px solid #1d4ed8', borderRadius: 6,
             padding: '8px 10px', fontSize: 11, color: '#93c5fd', lineHeight: 1.5,
           }}>
-            🎛️ Os <b>Thresholds</b> (regras abaixo) estão controlando a cor e a animação
-            desta linha. "Cor da linha" e "Animação" valem só como <b>reserva</b>, quando
-            nenhuma regra casar.
+            🎛️ As <b>regras de cor</b> (em Status Operacional) estão definindo a cor desta
+            linha. "Cor da linha"{animReserva ? ' e "Animação" valem' : ' vale'} só como{' '}
+            <b>reserva</b>, quando nenhuma regra casar.
           </div>
         )}
 
         {/* Cor */}
-        <div style={thresholdsActive ? { opacity: 0.5 } : undefined}>
-        <Section title={thresholdsActive ? 'Cor da linha (reserva)' : 'Cor da linha'}>
+        <div style={corReserva ? { opacity: 0.5 } : undefined}>
+        <Section title={corReserva ? 'Cor da linha (reserva)' : 'Cor da linha'}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
             {PRESET_COLORS.map((c) => (
               <button
@@ -327,8 +339,8 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
         </Section>
 
         {/* Animação */}
-        <div style={thresholdsActive ? { opacity: 0.5 } : undefined}>
-        <Section title={thresholdsActive ? 'Animação (reserva)' : 'Animação'}>
+        <div style={animReserva ? { opacity: 0.5 } : undefined}>
+        <Section title={animReserva ? 'Animação (reserva)' : 'Animação'}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {LINE_ANIMATIONS.map((a) => (
               <Chip key={a} active={(data.animation ?? 'none') === a} onClick={() => onChange({ animation: a })}>
@@ -361,7 +373,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
             <div>
               <div style={{ fontWeight: 600, fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>Origem ({sourceLabel})</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <span style={{ fontSize: 10, color: '#64748b', width: 12 }}>X:</span>
+                <span style={{ fontSize: 10, color: '#94a3b8', width: 12 }}>X:</span>
                 <input
                   type="range"
                   min="0"
@@ -376,7 +388,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
                 <span style={{ fontSize: 10, width: 26, textAlign: 'right' }}>{sourceX}%</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 10, color: '#64748b', width: 12 }}>Y:</span>
+                <span style={{ fontSize: 10, color: '#94a3b8', width: 12 }}>Y:</span>
                 <input
                   type="range"
                   min="0"
@@ -403,7 +415,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
             <div style={{ borderTop: '1px solid #1e293b', paddingTop: 6, marginTop: 4 }}>
               <div style={{ fontWeight: 600, fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>Destino ({targetLabel})</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <span style={{ fontSize: 10, color: '#64748b', width: 12 }}>X:</span>
+                <span style={{ fontSize: 10, color: '#94a3b8', width: 12 }}>X:</span>
                 <input
                   type="range"
                   min="0"
@@ -418,7 +430,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
                 <span style={{ fontSize: 10, width: 26, textAlign: 'right' }}>{targetX}%</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 10, color: '#64748b', width: 12 }}>Y:</span>
+                <span style={{ fontSize: 10, color: '#94a3b8', width: 12 }}>Y:</span>
                 <input
                   type="range"
                   min="0"
@@ -476,7 +488,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
               </Chip>
             ))}
           </div>
-          <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
             Só esconde o card — bindings e nome da interface continuam salvos.
           </div>
           {(data.sourceLabelOffset || data.targetLabelOffset) && (
@@ -508,7 +520,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
               </Chip>
             ))}
           </div>
-          <div style={{ fontSize: 10, color: '#64748b', marginTop: 6 }}>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>
             "Fibra" usa os bindings de Potência Tx/Rx DOM de cada lado (seção 🧬 abaixo).
           </div>
         </Section>
@@ -534,6 +546,20 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
             onMatch={(m) => patchBinding('targetStatusBinding', { match: m })}
             onAgg={(a) => patchBinding('targetStatusBinding', { aggregation: a })}
           />
+          {/* A métrica do link inteiro, do formato anterior, só aparece aqui
+              quando já existe e está valendo como status (sem regras de cor). */}
+          {statusAntigo && (
+            <>
+              <div style={{ height: 6 }} />
+              <BindRow
+                label="Status — link inteiro (antigo: prefira os lados A e B)"
+                binding={data.statusBinding}
+                seriesKeys={seriesKeys}
+                onMatch={(m) => patchBinding('statusBinding', { match: m })}
+                onAgg={(a) => patchBinding('statusBinding', { aggregation: a })}
+              />
+            </>
+          )}
 
           <div style={{ marginTop: 10, fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
             Regra de leitura
@@ -556,96 +582,8 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
             ⚠ Com "maior que 0", o ifOperStatus <b>2 (down)</b> é lido como up — a
             interface caída ficaria verde. Use o preset do Zabbix nesse caso.
           </div>
-        </Section>
 
-        {/* Thresholds (Flowcharting style) */}
-        <Section title="Thresholds da Linha (Flowcharting)">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: '#0b1220', padding: 8, borderRadius: 6, border: '1px solid #1e293b' }}>
-            <BindRow
-              label="Métrica de Status"
-              binding={data.statusBinding}
-              seriesKeys={seriesKeys}
-              onMatch={(m) => patchBinding('statusBinding', { match: m })}
-              onAgg={(a) => patchBinding('statusBinding', { aggregation: a })}
-            />
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {(data.colorMappings ?? []).map((mapping, idx) => {
-                const patch = (p: Partial<typeof mapping>) => {
-                  const list = [...(data.colorMappings ?? [])];
-                  list[idx] = { ...list[idx], ...p };
-                  onChange({ colorMappings: list });
-                };
-                return (
-                  <div key={idx} style={{ background: '#1e293b', padding: 6, borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {/* Linha 1: nível · valor · cor · remover */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '20px 1fr 26px 22px', gap: 6, alignItems: 'center' }}>
-                      <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 11, color: '#3b82f6' }} title="Nível (ordem)">{idx}</div>
-                      <input
-                        type="text"
-                        placeholder="Valor (ex: 1, 2, DOWN)"
-                        value={mapping.value}
-                        onChange={(e) => patch({ value: e.target.value })}
-                        style={{ ...inputText, width: '100%', padding: '3px 4px', fontSize: 11 }}
-                      />
-                      <input
-                        type="color"
-                        value={mapping.color}
-                        onChange={(e) => patch({ color: e.target.value })}
-                        title="Cor da linha quando esta regra casa"
-                        style={{ width: 24, height: 22, cursor: 'pointer', border: 'none', background: 'transparent', padding: 0 }}
-                      />
-                      <button
-                        onClick={() => onChange({ colorMappings: (data.colorMappings ?? []).filter((_, i) => i !== idx) })}
-                        style={{ ...btnReset, borderColor: '#ef4444', color: '#ef4444', padding: '2px', textAlign: 'center', width: '100%', fontSize: 10 }}
-                        title="Remover regra"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    {/* Linha 2: traçado · animação */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, alignItems: 'center' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 9, color: '#64748b', width: 36 }}>Traçado</span>
-                        <select
-                          value={mapping.lineStyle ?? ''}
-                          onChange={(e) => patch({ lineStyle: (e.target.value || undefined) as any })}
-                          style={{ ...inputText, width: '100%', cursor: 'pointer', padding: '2px 4px', fontSize: 11 }}
-                        >
-                          <option value="">— manter —</option>
-                          {LINE_STYLES.map((s) => (
-                            <option key={s} value={s}>{STYLE_LABEL[s]}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 9, color: '#64748b', width: 30 }}>Anim.</span>
-                        <select
-                          value={mapping.animation ?? 'none'}
-                          onChange={(e) => patch({ animation: e.target.value as any })}
-                          style={{ ...inputText, width: '100%', cursor: 'pointer', padding: '2px 4px', fontSize: 11 }}
-                        >
-                          {LINE_ANIMATIONS.map((anim) => (
-                            <option key={anim} value={anim}>{ANIM_LABEL[anim]}</option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  </div>
-                );
-              })}
-
-              <button
-                onClick={() => {
-                  const list = [...(data.colorMappings ?? []), { value: '', color: '#ef4444', animation: 'flow' as const }];
-                  onChange({ colorMappings: list });
-                }}
-                style={{ ...btnReset, width: '100%', borderStyle: 'dashed', background: 'transparent', color: '#3b82f6', borderColor: '#3b82f6', marginTop: 4 }}
-              >
-                ➕ Adicionar Regra
-              </button>
-            </div>
-          </div>
+          <RegrasDeCor data={data} onChange={onChange} />
         </Section>
 
         {/* ── Binding de dados (Zabbix etc) ── */}
@@ -665,7 +603,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
               <DiscoveryDiag seriesKeys={seriesKeys} />
             </div>
 
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>
               Ou ajuste manualmente — cole parte do nome da série. Aceita regex.
             </div>
 
@@ -715,10 +653,10 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
               />
               {/* Capacidade fixa: fallback quando o item Speed não resolve (coleta lenta) */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                <span style={{ fontSize: 10, color: '#64748b', whiteSpace: 'nowrap' }}>ou fixa:</span>
+                <span style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap' }}>ou fixa:</span>
                 <input
                   type="text"
-                  placeholder={data.linkSpeed !== undefined ? `atual: ${data.linkSpeed} bps` : 'ex: 400G, 10G, 1.5T'}
+                  placeholder={(liveSpeed ?? data.linkSpeed) !== undefined ? `atual: ${liveSpeed ?? data.linkSpeed} bps` : 'ex: 400G, 10G, 1.5T'}
                   value={speedText}
                   onChange={(e) => {
                     setSpeedText(e.target.value);
@@ -729,7 +667,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
               </div>
             </div>
             
-            <div style={{ marginTop: 12, marginBottom: 8, fontSize: 11, color: '#64748b', fontWeight: 'bold' }}>
+            <div style={{ marginTop: 12, marginBottom: 8, fontSize: 11, color: '#94a3b8', fontWeight: 'bold' }}>
               Endereços IP (Zabbix)
             </div>
             <BindRow
@@ -885,7 +823,7 @@ export const EdgeEditor: React.FC<Props> = ({ data, sourceLabel, targetLabel, se
             {showSeries && (
               <div style={{ marginTop: 6, maxHeight: 100, overflowY: 'auto', background: '#0b1220', border: '1px solid #334155', borderRadius: 4, padding: 6 }}>
                 {seriesKeys.length === 0 && (
-                  <div style={{ fontSize: 11, color: '#64748b' }}>Nenhuma série. Configure uma query no painel.</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>Nenhuma série. Configure uma query no painel.</div>
                 )}
                 {seriesKeys.map((k, i) => (
                   <div key={i} style={{ fontSize: 10.5, fontFamily: 'monospace', color: '#94a3b8', padding: '2px 0', borderBottom: '1px solid #1e293b', wordBreak: 'break-all' }}>
@@ -940,7 +878,7 @@ const DiscoveryDiag: React.FC<{ seriesKeys: string[] }> = ({ seriesKeys }) => {
             Não reconhecidas (amostra) — me mostre estas se faltar algo no auto-preenchimento:
           </div>
           {report.unmatched.map((k, i) => (
-            <div key={i} style={{ fontSize: 9.5, fontFamily: 'monospace', color: '#64748b', padding: '1px 0', wordBreak: 'break-all' }}>
+            <div key={i} style={{ fontSize: 9.5, fontFamily: 'monospace', color: '#94a3b8', padding: '1px 0', wordBreak: 'break-all' }}>
               {k}
             </div>
           ))}
@@ -1008,9 +946,118 @@ const BindRow: React.FC<{
   );
 };
 
+/**
+ * Regras valor → cor sobre o status dos lados A/B: o usuário digita o número
+ * e faz quantas quiser, como nos thresholds de antes — só que sem pedir a
+ * métrica de novo. A cor pronta escolhida diz também o que o valor significa
+ * (CORES_DE_REGRA): vermelho derruba o link, âmbar é alerta, cinza é sem
+ * status. Valor sem regra segue a regra de leitura.
+ *
+ * Regra nova nasce CINZA: com o valor digitado e a cor esquecida, o link fica
+ * "sem status" — nem inventa queda (vermelho) nem esconde uma (verde).
+ */
+const RegrasDeCor: React.FC<{
+  data: LinkEdgeData;
+  onChange: (patch: Partial<LinkEdgeData>) => void;
+}> = ({ data, onChange }) => {
+  const regras = data.colorMappings ?? [];
+  const salvar = (lista: ValueMapping[]) => onChange({ colorMappings: lista.length ? lista : undefined });
+  const patch = (idx: number, p: Partial<ValueMapping>) => salvar(regras.map((r, i) => (i === idx ? { ...r, ...p } : r)));
+  // Formato antigo: as regras leem uma métrica própria do link e só pintam.
+  const metricaPropria = regras.length > 0 && !!data.statusBinding?.match;
+  const mini = { ...inputText, padding: '3px 4px', fontSize: 11 };
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>Regras de cor (valor do status → cor)</div>
+
+      {metricaPropria && (
+        <div style={{
+          background: 'rgba(245,158,11,0.08)', border: '1px solid #92400e', borderRadius: 6,
+          padding: '6px 8px', fontSize: 10.5, color: '#fcd34d', lineHeight: 1.45, marginBottom: 8,
+        }}>
+          Formato antigo: estas regras leem{' '}
+          <code style={{ color: '#fde68a', wordBreak: 'break-all' }}>{data.statusBinding!.match}</code>{' '}
+          e só pintam a linha.
+          <button
+            onClick={() => onChange({ statusBinding: undefined })}
+            title="As regras passam a ler o status dos lados A/B — e a cor delas passa a dizer se o link está no ar"
+            style={{ ...btnReset, display: 'block', marginTop: 6, borderColor: '#f59e0b', color: '#fcd34d' }}
+          >
+            Usar o status dos lados A/B
+          </button>
+        </div>
+      )}
+
+      {regras.map((r, idx) => (
+        <div key={idx} style={{ background: '#1e293b', padding: 6, borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 6 }}>
+          {/* Linha 1: valor · cores prontas · outra cor · remover */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="text"
+              placeholder="valor"
+              value={r.value}
+              onChange={(e) => patch(idx, { value: e.target.value })}
+              style={{ ...mini, width: 44, flex: 'none' }}
+            />
+            <CorDaRegra color={r.color} onChange={(color) => patch(idx, { color })} />
+            <button
+              onClick={() => salvar(regras.filter((_, i) => i !== idx))}
+              title="Remover regra"
+              style={{ ...btnReset, borderColor: '#ef4444', color: '#ef4444', padding: '2px 6px', fontSize: 10 }}
+            >
+              ✕
+            </button>
+          </div>
+          {/* Linha 2: traçado · animação (fora da queda; na queda vale a aparência do DOWN) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 9, color: '#94a3b8', width: 36 }}>Traçado</span>
+              <select
+                value={r.lineStyle ?? ''}
+                onChange={(e) => patch(idx, { lineStyle: (e.target.value || undefined) as LineStyle | undefined })}
+                style={{ ...mini, width: '100%', cursor: 'pointer', padding: '2px 4px' }}
+              >
+                <option value="">— manter —</option>
+                {LINE_STYLES.map((s) => <option key={s} value={s}>{STYLE_LABEL[s]}</option>)}
+              </select>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 9, color: '#94a3b8', width: 30 }}>Anim.</span>
+              <select
+                value={r.animation ?? ''}
+                onChange={(e) => patch(idx, { animation: (e.target.value || undefined) as LineAnimation | undefined })}
+                style={{ ...mini, width: '100%', cursor: 'pointer', padding: '2px 4px' }}
+              >
+                <option value="">— manter —</option>
+                {LINE_ANIMATIONS.map((a) => <option key={a} value={a}>{ANIM_LABEL[a]}</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+      ))}
+
+      <button
+        onClick={() => salvar([...regras, { value: '', color: '#64748b' }])}
+        style={{ ...btnReset, width: '100%', borderStyle: 'dashed', background: 'transparent', color: '#3b82f6', borderColor: '#3b82f6' }}
+      >
+        ➕ Adicionar regra
+      </button>
+
+      {!metricaPropria && (
+        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6, lineHeight: 1.45 }}>
+          A cor diz o que o valor significa: <b style={{ color: '#f87171' }}>vermelho</b> = queda ·{' '}
+          <b style={{ color: '#fbbf24' }}>âmbar/laranja</b> = alerta · <b style={{ color: '#cbd5e1' }}>cinza</b> = sem
+          status · as demais = no ar. Valor sem regra segue a regra de leitura acima.
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div>
-    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>{title}</div>
+    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>{title}</div>
     {children}
   </div>
 );

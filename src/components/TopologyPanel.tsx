@@ -5,8 +5,8 @@ import React, { useMemo, useEffect, useState, useCallback, useRef } from 'react'
 import { PanelProps } from '@grafana/data';
 import {
   ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, ControlButton, MiniMap,
-  useNodesState, useEdgesState, useReactFlow, getNodesBounds,
-  Node, Edge, NodeChange, Connection, OnConnectStart,
+  useNodesState, useEdgesState, useReactFlow, useStore, getNodesBounds, getViewportForBounds,
+  Node, Edge, NodeChange, Connection, OnConnectStart, CoordinateExtent, Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -19,6 +19,9 @@ import { DeviceNode } from './nodes/DeviceNode';
 import { LinkEdge } from './edges/LinkEdge';
 import { LinkTooltip } from './LinkTooltip';
 import { LinkDetailsModal } from './LinkDetailsModal';
+import { ProtecaoModal } from './ProtecaoModal';
+import { useSemBarraHorizontal } from './useSemBarraHorizontal';
+import { limparParaPublicacao } from '../utils/publicacao';
 import { NetworkTestModal } from './NetworkTestModal';
 import { EdgeEditor } from './EdgeEditor';
 import { NodeEditor } from './NodeEditor';
@@ -29,6 +32,9 @@ import {
   resolveBindingDetailed,
 } from '../utils/dataBinding';
 import { resolveNodeStatus, resolveLinkStatus, dampStatus, NodeLiveStatus, FlapState, SideStatus } from '../utils/status';
+import { Palette, PanelTheme, paletteFor, ensureContrast, temaEfetivo } from '../utils/theme';
+import { useTheme2 } from '@grafana/ui';
+import { usePanelEditorOpen } from './usePanelEditorOpen';
 
 // Gera ids únicos e estáveis dentro do processo. Date.now() sozinho colide
 // quando o usuário duplica/cola vários nós no mesmo milissegundo.
@@ -80,17 +86,18 @@ const Sidebar: React.FC<{
   searchQuery: string;
   onSearch: (q: string) => void;
   onOpenTest: () => void;
-}> = ({ showIp, onToggleIp, hideTraffic, onToggleTraffic, searchQuery, onSearch, onOpenTest }) => {
+  pal: Palette;
+}> = ({ showIp, onToggleIp, hideTraffic, onToggleTraffic, searchQuery, onSearch, onOpenTest, pal }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   if (!isOpen) {
     return (
       <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10, display: 'flex', gap: 8 }}>
-        <button onClick={() => setIsOpen(true)} style={floatBtn}>
+        <button onClick={() => setIsOpen(true)} style={floatBtn(pal)}>
           <span style={{ fontSize: 16 }}>🛠️</span>
           <span style={{ fontWeight: 600, fontSize: 13 }}>Opções</span>
         </button>
-        <button onClick={onOpenTest} style={floatBtn} title="Ping / traceroute / MTR a partir de probes externas">
+        <button onClick={onOpenTest} style={floatBtn(pal)} title="Ping / traceroute / MTR a partir de probes externas">
           <span style={{ fontSize: 16 }}>🌐</span>
           <span style={{ fontWeight: 600, fontSize: 13 }}>Testes</span>
         </button>
@@ -107,25 +114,24 @@ const Sidebar: React.FC<{
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
-        background: 'rgba(15, 23, 42, 0.85)',
-        backdropFilter: 'blur(10px)',
-        border: '1px solid rgba(51, 65, 85, 0.5)',
+        background: pal.surface,
+        border: `1px solid ${pal.border}`,
         padding: '12px',
         borderRadius: 8,
         zIndex: 10,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+        boxShadow: `0 8px 24px ${pal.shadow}`,
         width: 260,
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: 8 }}>
-        <span style={{ fontWeight: 600, color: '#e2e8f0', fontSize: 13 }}>⚙️ Painel de Opções</span>
-        <button onClick={() => setIsOpen(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14 }}>✕</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${pal.border}`, paddingBottom: 8 }}>
+        <span style={{ fontWeight: 600, color: pal.text, fontSize: 13 }}>⚙️ Painel de Opções</span>
+        <button onClick={() => setIsOpen(false)} style={{ background: 'transparent', border: 'none', color: pal.textMuted, cursor: 'pointer', fontSize: 14 }}>✕</button>
       </div>
 
       {/* Barra de Pesquisa */}
       <div>
-        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>Busca no Mapa</div>
-        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(30, 41, 59, 0.8)', borderRadius: 6, padding: '6px 8px', border: '1px solid #334155' }}>
+        <div style={{ fontSize: 11, color: pal.textMuted, marginBottom: 4 }}>Busca no Mapa</div>
+        <div style={{ display: 'flex', alignItems: 'center', background: pal.field, borderRadius: 6, padding: '6px 8px', border: `1px solid ${pal.border}` }}>
           <span style={{ fontSize: 14, marginRight: 6 }}>🔍</span>
           <input
             type="search"
@@ -133,22 +139,22 @@ const Sidebar: React.FC<{
             value={searchQuery}
             onChange={(e) => onSearch(e.target.value)}
             style={{
-              background: 'transparent', border: 'none', color: '#e2e8f0', outline: 'none',
+              background: 'transparent', border: 'none', color: pal.text, outline: 'none',
               fontSize: 13, width: '100%', fontFamily: 'monospace',
             }}
           />
         </div>
       </div>
 
-      <div style={{ borderTop: '1px solid #334155', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ borderTop: `1px solid ${pal.border}`, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {/* Toggle Switch de IP */}
-        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: '#e2e8f0', fontSize: 13, fontWeight: 500 }}>
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: pal.text, fontSize: 13, fontWeight: 500 }}>
           <span>Mostrar IPs das Interfaces</span>
           <div style={{ position: 'relative', width: 36, height: 20 }}>
             <input type="checkbox" checked={showIp} onChange={onToggleIp} style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }} />
             <div style={{
               position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: showIp ? '#3b82f6' : '#475569', transition: '.3s', borderRadius: 20,
+              backgroundColor: showIp ? '#3b82f6' : pal.switchOff, transition: '.3s', borderRadius: 20,
             }}>
               <span style={{
                 position: 'absolute', content: '""', height: 14, width: 14,
@@ -160,13 +166,13 @@ const Sidebar: React.FC<{
         </label>
 
         {/* Toggle Switch de Tráfego */}
-        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: '#e2e8f0', fontSize: 13, fontWeight: 500 }}>
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: pal.text, fontSize: 13, fontWeight: 500 }}>
           <span>Ocultar Cards de Tráfego</span>
           <div style={{ position: 'relative', width: 36, height: 20 }}>
             <input type="checkbox" checked={hideTraffic} onChange={onToggleTraffic} style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }} />
             <div style={{
               position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: hideTraffic ? '#3b82f6' : '#475569', transition: '.3s', borderRadius: 20,
+              backgroundColor: hideTraffic ? '#3b82f6' : pal.switchOff, transition: '.3s', borderRadius: 20,
             }}>
               <span style={{
                 position: 'absolute', content: '""', height: 14, width: 14,
@@ -182,11 +188,11 @@ const Sidebar: React.FC<{
   );
 };
 
-const floatBtn: React.CSSProperties = {
-  background: 'rgba(15, 23, 42, 0.85)', color: '#cbd5e1', border: '1px solid #334155',
+const floatBtn = (pal: Palette): React.CSSProperties => ({
+  background: pal.surface, color: pal.text, border: `1px solid ${pal.border}`,
   borderRadius: 8, padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)',
-};
+  boxShadow: `0 4px 12px ${pal.shadow}`,
+});
 
 const nodeTypes = { device: DeviceNode };
 const edgeTypes = { link: LinkEdge };
@@ -200,7 +206,11 @@ const ANIMATION_CSS = `
 }
 @keyframes fc-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50% { opacity: 0.75; }
+}
+@keyframes fc-halo {
+  0%, 100% { stroke-opacity: 0.55; }
+  50% { stroke-opacity: 0.12; }
 }
 @keyframes fc-glow {
   0%, 100% { stroke-opacity: 0.2; }
@@ -226,6 +236,18 @@ interface ClickState {
 
 export const TopologyPanel: React.FC<Props> = (props) => {
   const { options, width, height, data } = props;
+
+  // O modo edição só vale dentro do editor do painel (menu do painel → Edit).
+  // Fora dele o mapa é sempre de visualização, mesmo com a opção salva ligada
+  // — antes ela valia no dashboard pra quem estivesse só olhando o NOC.
+  const noEditor = usePanelEditorOpen(props.id);
+  const editMode = !!options.editMode && noEditor;
+
+  // Dashboard público: some a barra horizontal falsa do Grafana (ver o hook)
+  const raiz = useRef<HTMLDivElement>(null);
+  useSemBarraHorizontal(raiz);
+  // Fundo e barra lateral no mesmo tema do mapa (fixado, ou o do Grafana)
+  const tema = temaEfetivo(options.theme, useTheme2().isDark);
 
   // Aplica o limite de obsolescência configurado antes de resolver os bindings.
   setStaleThresholdMs((options.staleThresholdSec ?? DEFAULT_OPTIONS.staleThresholdSec) * 1000);
@@ -283,6 +305,15 @@ export const TopologyPanel: React.FC<Props> = (props) => {
     dampRef.current.seen = series;
     return changed;
   }, [series]);
+
+  // Equipamento ou link apagado não deixa estado de amortecimento pra trás
+  // (o mapa crescia a cada edição, para sempre, enquanto o painel vivesse).
+  useEffect(() => {
+    const vivos = new Set<string>([...topology.nodes.map((n) => n.id), ...topology.edges.map((e) => e.id)]);
+    for (const id of dampRef.current.st.keys()) {
+      if (!vivos.has(id)) dampRef.current.st.delete(id);
+    }
+  }, [topology]);
 
   const confirmCycles = Math.max(1, options.downConfirmCycles ?? DEFAULT_OPTIONS.downConfirmCycles);
 
@@ -437,12 +468,13 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         });
       }
 
-      // O statusBinding legado tem dois usos históricos. Com colorMappings ele
-      // é COSMÉTICO (mapeia valor→cor, inclusive de métricas que não são
-      // status) e continua só pintando; sem mappings ele era simplesmente
-      // ignorado — agora vira fonte de status de verdade.
-      const legacyIsCosmetic = !!(e.data.colorMappings && e.data.colorMappings.length > 0);
-      if (e.data.statusBinding && !legacyIsCosmetic) {
+      // As regras valor → cor leem o status dos lados A/B: a cor diz o que o
+      // valor significa (vermelho = queda...). FORMATO ANTIGO: com a métrica
+      // própria do link (statusBinding) preenchida, elas leem aquela métrica e
+      // só pintam. E o statusBinding sem regras segue como fonte de status.
+      const temRegras = (e.data.colorMappings?.length ?? 0) > 0;
+      const legacyIsCosmetic = temRegras && !!e.data.statusBinding?.match;
+      if (e.data.statusBinding && !temRegras) {
         sides.push({
           label: 'link',
           result: resolveBindingDetailed(series, e.data.statusBinding),
@@ -465,11 +497,20 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         sides,
         operator: e.data.statusOperator,
         value: e.data.statusValue,
+        rules: temRegras && !legacyIsCosmetic ? e.data.colorMappings : undefined,
         freshTraffic,
       }));
       let edgeStatus: LinkStatus = outcome.status;
+      // A regra (valor → cor) que decidiu pinta a linha, com o traçado e a
+      // animação dela se tiver. Ganha da cor fixa do link — é a escolha mais
+      // específica. O piso de contraste do tema vale em cima da cor.
+      if (outcome.rule) {
+        edgeColor = outcome.rule.color;
+        if (outcome.rule.lineStyle) edgeLineStyle = outcome.rule.lineStyle;
+        if (outcome.rule.animation) edgeAnim = outcome.rule.animation;
+      }
 
-      // Regras cosméticas: PINTAM e nada mais. Elas não decidem se o link está
+      // Regras do formato antigo (com métrica própria): PINTAM e nada mais. Não decidem se o link está
       // no ar — antes, uma regra que casasse marcava o link como 'up' junto com
       // a cor, então um link pintado de vermelho pela regra reportava UP no
       // modal, sem causa no hover e sem a aparência de DOWN. A imagem dizia uma
@@ -498,7 +539,9 @@ export const TopologyPanel: React.FC<Props> = (props) => {
       const effTraffic = Math.max(sourceUp ?? 0, sourceDown ?? 0, targetUp ?? 0, targetDown ?? 0, up ?? 0, down ?? 0);
       const util = effSpeed && effSpeed > 0 ? Math.min(1, effTraffic / effSpeed) : 0;
       if (edgeStatus === 'up' && util >= 0.9 && e.data.color === undefined) {
-        edgeColor = '#f59e0b';
+        // Sem cor fixa: quem pinta o warning é a paleta do tema (o âmbar do
+        // escuro ficava a 2:1 do fundo claro).
+        edgeColor = undefined;
         edgeStatus = 'warning';
       }
 
@@ -506,8 +549,11 @@ export const TopologyPanel: React.FC<Props> = (props) => {
       // override por link. Substitui o antigo modo "apagado" — link caído agora
       // é vermelho e visível, não esmaecido. Sobrepõe cor manual de propósito:
       // queda precisa ser inconfundível, mesmo em link com cor customizada.
+      // Na queda decidida por uma regra, a COR dela fica (é a escolha pro
+      // valor); traçado e animação vêm da aparência do DOWN — 'flow' num link
+      // caído passaria a impressão de tráfego.
       if (edgeStatus === 'down') {
-        edgeColor = e.data.downColor ?? options.downColor ?? DEFAULT_OPTIONS.downColor;
+        edgeColor = outcome.rule?.color ?? e.data.downColor ?? options.downColor ?? DEFAULT_OPTIONS.downColor;
         edgeLineStyle = e.data.downLineStyle ?? options.downLineStyle ?? DEFAULT_OPTIONS.downLineStyle;
         edgeAnim = e.data.downAnimation ?? options.downAnimation ?? DEFAULT_OPTIONS.downAnimation;
       }
@@ -565,6 +611,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         // Escala da fonte injetada: o card (LinkEdge) usa pra afastar os labels
         // proporcionalmente, senão eles colidem ao aumentar a escala.
         fontScale: options.fontScale ?? 1,
+        cardScale: options.cardScale ?? 1,
       } as LinkEdgeData;
       return {
         id: e.id,
@@ -574,16 +621,17 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         data: liveData as any,
       };
     }),
-    [topology, series, showIp, searchQuery, hideTrafficCards, options.fontScale, nodeLive,
+    [topology, series, showIp, searchQuery, hideTrafficCards, options.fontScale, options.cardScale, nodeLive,
       options.dimLinksOnNodeDown, noData, nodeLabels, damp,
       options.downColor, options.downLineStyle, options.downAnimation]
   );
 
   return (
     <div
+      ref={raiz}
       style={{
         width, height,
-        background: options.theme === 'light' ? '#f8fafc' : '#020617',
+        background: paletteFor(tema).canvas,
         position: 'relative',
         fontSize: `${14 * (options.fontScale ?? 1)}px`,
       }}
@@ -592,6 +640,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
       <ReactFlowProvider>
         <TopologyInner
           {...props}
+          editMode={editMode}
           initialNodes={initialNodes}
           initialEdges={initialEdges}
           topology={topology}
@@ -599,7 +648,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
           dataHealth={dataHealth}
           onOpenTest={(target) => setTestTarget(target)}
         />
-        {!options.editMode && (
+        {!editMode && !options.publicMode && (
           <Sidebar
             showIp={showIp}
             onToggleIp={() => setShowIp(!showIp)}
@@ -608,21 +657,30 @@ export const TopologyPanel: React.FC<Props> = (props) => {
             searchQuery={searchQuery}
             onSearch={setSearchQuery}
             onOpenTest={() => setTestTarget('')}
+            pal={paletteFor(tema)}
           />
         )}
-        {testTarget !== null && (
-          <NetworkTestModal
-            initialTarget={testTarget}
-            token={options.globalpingToken}
-            onClose={() => setTestTarget(null)}
-          />
+        {testTarget !== null && !options.publicMode && (
+          <ProtecaoModal oQue="o teste de rede" onClose={() => setTestTarget(null)}>
+            <NetworkTestModal
+              initialTarget={testTarget}
+              token={options.globalpingToken}
+              onClose={() => setTestTarget(null)}
+            />
+          </ProtecaoModal>
         )}
       </ReactFlowProvider>
     </div>
   );
 };
 
+/** Limites do zoom — os mesmos no React Flow e no ajuste à tela */
+const MIN_ZOOM = 0.05;
+const MAX_ZOOM = 4;
+
 interface InnerProps extends Props {
+  /** Modo edição EFETIVO: opção ligada e painel aberto no editor do Grafana */
+  editMode: boolean;
   initialNodes: Node[];
   initialEdges: Edge[];
   topology: NetworkTopology;
@@ -635,17 +693,42 @@ interface InnerProps extends Props {
 }
 
 const TopologyInner: React.FC<InnerProps> = ({
-  initialNodes, initialEdges, topology, options, width, height, onOptionsChange, data, onOpenTest, noData, dataHealth,
+  initialNodes, initialEdges, topology, options, width, height, onOptionsChange, data, timeRange, onOpenTest, noData, dataHealth, editMode,
 }) => {
   const seriesKeys = useMemo(() => listSeriesKeys(data?.series ?? []), [data?.series]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const { fitView, fitBounds } = useReactFlow();
+  const { fitView, setViewport } = useReactFlow();
+  // Tamanho da área do mapa (o do React Flow, já sem bordas do painel)
+  const larguraMapa = useStore((s) => s.width);
+  const alturaMapa = useStore((s) => s.height);
 
   const [hover, setHover] = useState<HoverState | null>(null);
   const [clicked, setClicked] = useState<ClickState | null>(null);
   // Painel travado: bloqueia zoom/pan (útil em TV de NOC, evita zoom acidental)
-  const [locked, setLocked] = useState(false);
+  // Começa travado: a roda do mouse rola a página (não dá zoom) e o mapa fica
+  // como o ajuste deixou. O cadeado nos controles destrava.
+  const [locked, setLocked] = useState(true);
+  // Paleta do tema do painel (o fixado ou, em "Seguir o Grafana", o do
+  // Grafana agora): nós e arestas recebem pelo EditorContext
+  const tema: PanelTheme = temaEfetivo(options.theme, useTheme2().isDark);
+  const pal = paletteFor(tema);
+  // Modo público: sem nada que mostre IP, host, descrição ou abra algo
+  const publico = !!options.publicMode;
+  // O que a cópia pública ainda carrega no JSON (IPs, token, bindings de
+  // IP/potência/erros) — o botão da faixa do modo edição tira de uma vez.
+  const limpezaPublica = useMemo(() => {
+    if (!publico || !onOptionsChange) return undefined;
+    const r = limparParaPublicacao(options);
+    const { nos, links, token } = r.limpeza;
+    if (!nos && !links && !token) return undefined;
+    const partes = [
+      nos ? `IP/link de ${nos} equipamento${nos > 1 ? 's' : ''}` : '',
+      links ? `IP, erros e potência de ${links} link${links > 1 ? 's' : ''}` : '',
+      token ? 'o token do Globalping' : '',
+    ].filter(Boolean);
+    return { resumo: partes.join(', '), aplicar: () => onOptionsChange(r.options) };
+  }, [publico, options, onOptionsChange]);
 
   // Espelhos em ref: o fitToContent lê daqui pra NÃO depender de `nodes`/`topology`.
   // Sem isso, os objetos mudam a cada refresh de dados (10s) → o callback
@@ -660,6 +743,11 @@ const TopologyInner: React.FC<InnerProps> = ({
   // isso o mapa ficava descentralizado, cortado de um lado e sobrando do outro).
   // Margem proporcional à escala da fonte reserva espaço pros cards.
   // Estável (só refaz se a escala mudar) → só roda no resize/fit manual, não a cada refresh.
+  // Celular em pé (ver fitToContent): até onde dá pra arrastar o mapa. Sem
+  // valor, o arraste é livre (e só com o cadeado aberto).
+  const [limite, setLimite] = useState<CoordinateExtent | undefined>(undefined);
+  // A dica "arraste para os lados" some no primeiro arraste
+  const [arrastou, setArrastou] = useState(false);
   const fitToContent = useCallback((duration = 300) => {
     const ns = nodesRef.current;
     if (!ns.length) return;
@@ -674,12 +762,34 @@ const TopologyInner: React.FC<InnerProps> = ({
         if (wp.y > maxY) maxY = wp.y;
       }
     }
-    const m = 45 * (options.fontScale ?? 1) + 25; // reserva pros labels
-    fitBounds(
-      { x: minX - m, y: minY - m, width: (maxX - minX) + m * 2, height: (maxY - minY) + m * 2 },
-      { padding: 0.02, duration }
-    );
-  }, [options.fontScale, fitBounds]);
+    const m = 45 * (options.fontScale ?? 1) * (options.cardScale ?? 1) + 25; // reserva pros labels
+    const caixa = { x: minX - m, y: minY - m, width: (maxX - minX) + m * 2, height: (maxY - minY) + m * 2 };
+    if (!larguraMapa || !alturaMapa) return;
+    // Celular em pé: painel estreito e bem mais alto que o desenho (que é
+    // largo). Ajustado pela largura, o mapa virava uma faixa fina no meio do
+    // painel. Aqui ele preenche a ALTURA (~3x maior, cards legíveis) e o
+    // visitante arrasta para os lados; o limite não deixa sair do desenho.
+    // Só quando o painel cabe na tela (autofitpanels): num painel mais alto que
+    // a tela, arrastar no mapa prenderia a rolagem da página.
+    const emPe = !editMode && larguraMapa < 600 && alturaMapa <= window.innerHeight
+      && alturaMapa / larguraMapa > (caixa.height / caixa.width) * 1.3;
+    if (emPe) {
+      const zoom = Math.min(MAX_ZOOM, alturaMapa / caixa.height);
+      setLimite([[caixa.x, caixa.y], [caixa.x + caixa.width, caixa.y + caixa.height]]);
+      setViewport({
+        zoom,
+        x: larguraMapa / 2 - (caixa.x + caixa.width / 2) * zoom,
+        y: alturaMapa / 2 - (caixa.y + caixa.height / 2) * zoom,
+      }, { duration });
+      return;
+    }
+    setLimite(undefined);
+    // Sempre centralizado. Encostar no topo (0.4.0-teste.9) servia quando o
+    // painel era mais alto que a tela; com o autofitpanels o painel cabe na
+    // tela e o mapa no alto deixava a sobra toda embaixo.
+    const vp = getViewportForBounds(caixa, larguraMapa, alturaMapa, MIN_ZOOM, MAX_ZOOM, 0.02);
+    setViewport(vp, { duration });
+  }, [options.fontScale, options.cardScale, setViewport, larguraMapa, alturaMapa, editMode]);
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
 
@@ -699,7 +809,7 @@ const TopologyInner: React.FC<InnerProps> = ({
   const clipboard = useRef<Array<{ data: any; width?: number; height?: number; position?: { x: number; y: number } }>>([]);
 
   useEffect(() => {
-    if (!options.editMode) return;
+    if (!editMode) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
@@ -751,15 +861,15 @@ const TopologyInner: React.FC<InnerProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nodes, options, topology, onOptionsChange]);
+  }, [editMode, nodes, options, topology, onOptionsChange]);
 
   // Fecha o editor se sair do modo edição
   useEffect(() => { 
-    if (!options.editMode) {
+    if (!editMode) {
       setEditingEdgeId(null); 
       setEditingNodeId(null);
     }
-  }, [options.editMode]);
+  }, [editMode]);
 
   // Re-sincroniza com a topologia/dados sem destruir a interação em curso:
   //  • não toca nos nós enquanto há um arraste em andamento (evita o nó "voltar"
@@ -955,53 +1065,55 @@ const TopologyInner: React.FC<InnerProps> = ({
 
   // Re-fit ao redimensionar (importante pra TV)
   useEffect(() => {
-    if (options.fitView && !options.editMode) {
+    if (options.fitView && !editMode) {
       const t = setTimeout(() => fitToContent(300), 80);
       return () => clearTimeout(t);
     }
-  }, [width, height, options.fitView, options.editMode, fitToContent]);
+  }, [width, height, options.fitView, editMode, fitToContent]);
 
-  // Em modo edição: salva posições quando o usuário termina de arrastar
-  const lastSavedPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
-
+  // Em modo edição: salva as posições quando o usuário termina de arrastar
+  // (ou move com as setas). A mudança de fim de arraste já traz a posição
+  // final de cada nó movido. Antes isto lia o estado por um setNodes(updater)
+  // e gravava DE DENTRO do updater — função que o React pode rodar mais de uma
+  // vez, e no meio do render de outro componente.
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
     onNodesChange(changes);
-    if (!options.editMode) return;
-    // Detecta término de arraste (position change com dragging=false)
-    const dragEnds = changes.filter(
-      (c) => c.type === 'position' && c.dragging === false
-    );
-    if (dragEnds.length === 0) return;
-
-    // Coleta posições atuais e salva no panel options
-    setNodes((curr) => {
-      const positionsChanged = curr.some((n) => {
-        const last = lastSavedPositions.current.get(n.id);
-        return !last || last.x !== n.position.x || last.y !== n.position.y;
-      });
-      if (positionsChanged && onOptionsChange) {
-        const updatedTopology: NetworkTopology = {
-          ...topology,
-          nodes: topology.nodes.map((tn) => {
-            const found = curr.find((c) => c.id === tn.id);
-            return found ? { ...tn, position: found.position } : tn;
-          }),
-        };
-        curr.forEach((n) => lastSavedPositions.current.set(n.id, n.position));
-        onOptionsChange({ ...options, topology: updatedTopology });
+    if (!editMode || !onOptionsChange) return;
+    const finais = new Map<string, { x: number; y: number }>();
+    for (const c of changes) {
+      if (c.type === 'position' && c.dragging === false && c.position) {
+        finais.set(c.id, c.position);
       }
-      return curr;
+    }
+    const mudou = topology.nodes.some((tn) => {
+      const p = finais.get(tn.id);
+      return !!p && (p.x !== tn.position.x || p.y !== tn.position.y);
     });
-  }, [onNodesChange, options, topology, onOptionsChange, setNodes]);
+    if (!mudou) return;
+    onOptionsChange({
+      ...options,
+      topology: {
+        ...topology,
+        nodes: topology.nodes.map((tn) => {
+          const p = finais.get(tn.id);
+          return p ? { ...tn, position: p } : tn;
+        }),
+      },
+    });
+    // editMode nas dependências: entrar no Edit do Grafana 12 não remonta o
+    // painel nem muda as opções — sem ele, o callback ficava com o modo de
+    // fora do editor e o arraste lá dentro não gravava.
+  }, [onNodesChange, editMode, options, topology, onOptionsChange]);
 
   // O tooltip é acionado por hover NO CARD da interface (via hoverLink/unhoverLink),
   // não pela linha — assim mostra sempre o lado certo, sem brigar com o hover da aresta.
   const onEdgeClick = useCallback((evt: React.MouseEvent, edge: Edge) => {
     setHover(null);
-    if (options.editMode) {
+    if (editMode) {
       // No modo edição: clicar abre o editor de propriedades da linha
       setEditingEdgeId(edge.id);
     } else {
+      // (No modo público o modal abre só com o tráfego — ver LinkDetailsModal.)
       // Fora do modo edição: abre o modal de UMA interface.
       // 1) Só um lado configurado → abre esse lado.
       // 2) Dois lados → abre o MAIS PRÓXIMO do clique (a zona de clique da linha
@@ -1024,23 +1136,23 @@ const TopologyInner: React.FC<InnerProps> = ({
       }
       setClicked({ edgeId: edge.id, side });
     }
-  }, [options.editMode, screenToFlowPosition, getNode]);
+  }, [editMode, screenToFlowPosition, getNode]);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    if (options.editMode) {
+    if (editMode) {
       setEditingNodeId(node.id);
     }
     // Modo visualização: clique esquerdo fica reservado pro linkUrl do nó
     // (dashboard do equipamento). Testes de rede = botão DIREITO.
-  }, [options.editMode]);
+  }, [editMode]);
 
   // Botão DIREITO no equipamento → única entrada de testes de rede pelo nó
   // (o esquerdo abre o dashboard via linkUrl). IP do equipamento pré-preenchido.
   const onNodeContextMenu = useCallback((e: React.MouseEvent, node: Node) => {
-    if (options.editMode) return;
+    if (editMode || publico) return;
     e.preventDefault();
     onOpenTest(((node.data as any)?.ip as string) ?? '');
-  }, [options.editMode, onOpenTest]);
+  }, [editMode, publico, onOpenTest]);
 
   // Abre o modal de detalhes focado num lado (clique num card de interface)
   const openLinkDetails = useCallback((edgeId: string, side?: 'source' | 'target') => {
@@ -1061,9 +1173,19 @@ const TopologyInner: React.FC<InnerProps> = ({
   const hoveredEdge = hover ? findEdge(hover.edgeId) : null;
   const clickedEdge = clicked ? findEdge(clicked.edgeId) : null;
   const editingEdge = editingEdgeId ? findEdge(editingEdgeId) : null;
+  const editingEdgeSaved = editingEdgeId ? topology.edges.find((e) => e.id === editingEdgeId) : undefined;
 
   return (
-    <EditorProvider value={{ editMode: !!options.editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, deleteEdge, setNodeData: setNodeDataPatch, deleteNode, duplicateNode, openLinkDetails, hoverLink, unhoverLink, openTest: onOpenTest }}>
+    <EditorProvider value={{
+      editMode: !!editMode, theme: tema, publicMode: publico,
+      setEdgeWaypoints, setEdgeAnchor, setEdgeData, deleteEdge, setNodeData: setNodeDataPatch, deleteNode, duplicateNode,
+      // Modo público: sem testes de rede. Tooltip e modal abrem, mas só com o
+      // tráfego (LinkTooltip / LinkDetailsModal `publico`).
+      openLinkDetails,
+      hoverLink,
+      unhoverLink,
+      openTest: publico ? undefined : onOpenTest,
+    }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -1074,32 +1196,65 @@ const TopologyInner: React.FC<InnerProps> = ({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         connectionMode={'loose' as any}
-        fitView={options.fitView && !options.editMode}
+        fitView={options.fitView && !editMode}
         fitViewOptions={{ padding: 0.1 }}
         proOptions={{ hideAttribution: true }}
-        nodesDraggable={!!options.editMode}
-        nodesConnectable={!!options.editMode}
+        nodesDraggable={!!editMode}
+        nodesConnectable={!!editMode}
         elementsSelectable={true}
-        panOnDrag={options.editMode || !locked}
-        zoomOnScroll={options.editMode || !locked}
-        zoomOnPinch={options.editMode || !locked}
-        zoomOnDoubleClick={options.editMode || !locked}
-        minZoom={0.15}
-        maxZoom={4}
+        // Celular em pé (limite definido): arrastar para os lados vale mesmo
+        // com o cadeado — o mapa preenche a altura e o resto fica dos lados.
+        panOnDrag={editMode || !locked || !!limite}
+        translateExtent={limite}
+        onMoveStart={(ev) => { if (ev && limite) setArrastou(true); }}
+        zoomOnScroll={editMode || !locked}
+        zoomOnPinch={editMode || !locked}
+        zoomOnDoubleClick={editMode || !locked}
+        // Travado, a roda (e o arrastar no celular) rola a PÁGINA; o padrão do
+        // React Flow engolia o scroll em cima do mapa.
+        preventScrolling={editMode || !locked}
+        // 0.15 não deixava o mapa inteiro caber num celular em pé (~340 px de
+        // largura): o ajuste batia no limite e o mapa ficava cortado e deslocado.
+        minZoom={MIN_ZOOM}
+        maxZoom={MAX_ZOOM}
         onEdgeClick={onEdgeClick}
         onNodeClick={onNodeClick}
         onNodeContextMenu={onNodeContextMenu}
         onConnectStart={handleConnectStart}
         onConnect={handleConnect}
-        snapToGrid={!!options.editMode}
+        snapToGrid={!!editMode}
         snapGrid={[15, 15]}
+        // Botões de zoom na paleta do tema. Pelas variáveis, não pelo
+        // colorMode do React Flow: o modo dark dele pinta o fundo de #141414.
+        style={{
+          '--xy-controls-button-background-color': pal.surface,
+          '--xy-controls-button-background-color-hover': pal.field,
+          '--xy-controls-button-color': pal.text,
+          '--xy-controls-button-color-hover': pal.text,
+          '--xy-controls-button-border-color': pal.border,
+        } as React.CSSProperties}
       >
-        <Background variant={BackgroundVariant.Lines} color={options.theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)'} gap={options.editMode ? 15 : 30} />
+        <Background variant={BackgroundVariant.Lines} color={pal.grid} gap={editMode ? 15 : 30} />
+        {/* Celular em pé: sem a dica, ninguém descobre que o resto do mapa
+            está dos lados. Some no primeiro arraste. */}
+        {limite && !arrastou && (
+          <Panel position="top-center">
+            <div style={{
+              background: pal.surface, color: pal.text, border: `1px solid ${pal.border}`,
+              borderRadius: 999, padding: '4px 12px', fontSize: 12, whiteSpace: 'nowrap',
+              boxShadow: `0 2px 8px ${pal.shadow}`, pointerEvents: 'none',
+            }}>
+              ⟷ arraste para os lados
+            </div>
+          </Panel>
+        )}
+        {/* Zoom, ajustar e o cadeado — também no modo público: quem olha pela
+            internet aproxima um trecho e volta ao mapa inteiro. */}
         <Controls showInteractive={false} showFitView={false}>
           <ControlButton onClick={() => fitToContent(300)} title="Ajustar à tela (preencher)">
             <span style={{ fontSize: 14, lineHeight: 1 }}>⛶</span>
           </ControlButton>
-          {!options.editMode && (
+          {!editMode && (
             <ControlButton
               onClick={() => setLocked((l) => !l)}
               title={locked ? 'Destravar painel (zoom/pan)' : 'Travar painel (sem zoom/pan)'}
@@ -1108,14 +1263,14 @@ const TopologyInner: React.FC<InnerProps> = ({
             </ControlButton>
           )}
         </Controls>
-        {options.showMinimap && (
+        {options.showMinimap && (!publico || editMode) && (
           <MiniMap
-            nodeColor={(n) => (n.data as any)?.status === 'down' ? '#ef4444' : '#22d3ee'}
-            maskColor="rgba(2, 6, 23, 0.7)"
-            style={{ background: '#0f172a' }}
+            nodeColor={(n) => (n.data as any)?.status === 'down' ? pal.line.down : pal.ip}
+            maskColor={pal.minimapMask}
+            style={{ background: pal.surface, border: `1px solid ${pal.border}` }}
           />
         )}
-        {options.editMode && <EditModeBanner onAddNode={addNode} />}
+        {editMode && <EditModeBanner onAddNode={addNode} limpeza={limpezaPublica} />}
         {/* Sem a tarja, o mapa todo cinza é ambíguo: cinza também significa
             "não configurado", então o plantão leria "mapa mal montado" em vez
             de "estou cego agora" — reações opostas no pior momento. */}
@@ -1137,19 +1292,21 @@ const TopologyInner: React.FC<InnerProps> = ({
         {topology.nodes.length === 0 && (
           <div style={{
             position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            background: 'rgba(15, 23, 42, 0.9)', padding: '24px 40px', borderRadius: 12,
-            border: '1px solid #334155', color: '#cbd5e1', textAlign: 'center', zIndex: 10,
-            pointerEvents: 'none',
+            background: pal.surface, padding: '24px 40px', borderRadius: 12,
+            border: `1px solid ${pal.border}`, color: pal.text, textAlign: 'center', zIndex: 10,
+            pointerEvents: 'none', boxShadow: `0 8px 24px ${pal.shadow}`,
           }}>
-            <h2 style={{ margin: '0 0 8px 0', color: '#f59e0b' }}>Topologia Vazia</h2>
-            {options.editMode ? (
+            <h2 style={{ margin: '0 0 8px 0', color: pal.statusText.warning }}>Topologia Vazia</h2>
+            {editMode ? (
               <p style={{ margin: 0 }}>Clique em <b>"Adicionar Equipamento"</b> no banner<br/>acima para começar a montar o mapa.</p>
             ) : (
-              <p style={{ margin: 0 }}>Ative o <b>Modo Edição</b> nas opções do painel<br/>e clique em "Adicionar Equipamento".</p>
+              <p style={{ margin: 0 }}>Abra o painel em <b>Edit</b> (menu do painel), ative o<br/><b>Modo Edição</b> nas opções e clique em "Adicionar Equipamento".</p>
             )}
           </div>
         )}
-        {options.showLegend && <Legend />}
+        {options.showLegend && (
+          <Legend pal={pal} downColor={options.downColor ?? DEFAULT_OPTIONS.downColor} />
+        )}
       </ReactFlow>
 
       {/* Tooltip de hover */}
@@ -1162,29 +1319,41 @@ const TopologyInner: React.FC<InnerProps> = ({
           focusSide={hover.side}
           x={hover.x}
           y={hover.y}
+          theme={tema}
+          publico={publico && !editMode}
         />
       )}
 
       {/* Modal de detalhes (fora do modo edição) */}
       {clicked && clickedEdge && (
-        <LinkDetailsModal
-          key={`${clicked.edgeId}:${clicked.side ?? 'source'}`}
-          edgeId={clickedEdge.id}
-          data={clickedEdge.data as LinkEdgeData}
-          sourceLabel={findNodeLabel(clickedEdge.source)}
-          targetLabel={findNodeLabel(clickedEdge.target)}
-          series={data?.series ?? []}
-          focusSide={clicked.side}
-          onClose={() => setClicked(null)}
-        />
+        <ProtecaoModal key={`${clicked.edgeId}:${clicked.side ?? 'source'}`} oQue="os detalhes do link" onClose={() => setClicked(null)}>
+          <LinkDetailsModal
+            edgeId={clickedEdge.id}
+            data={clickedEdge.data as LinkEdgeData}
+            sourceLabel={findNodeLabel(clickedEdge.source)}
+            targetLabel={findNodeLabel(clickedEdge.target)}
+            series={data?.series ?? []}
+            request={data?.request}
+            fimDaJanela={timeRange?.to?.valueOf()}
+            focusSide={clicked.side}
+            publico={publico && !editMode}
+            onClose={() => setClicked(null)}
+          />
+        </ProtecaoModal>
       )}
 
       {/* Editor de propriedades (modo edição) */}
-      {editingEdge && (
+      {editingEdge && editingEdgeSaved && (
         <EdgeEditor
           key={editingEdge.id}
           edgeId={editingEdge.id}
-          data={editingEdge.data as LinkData}
+          // Do que está SALVO, como o editor de nó. O `edges` do React Flow é
+          // ressincronizado num efeito, um render depois das opções: a cada
+          // letra o campo recebia o valor antigo e depois o novo, e o cursor
+          // pulava. E o vivo traz a aparência calculada (vermelho e pulse do
+          // DOWN) no lugar da configurada.
+          data={editingEdgeSaved.data as LinkData}
+          liveSpeed={(editingEdge.data as LinkEdgeData).linkSpeed}
           sourceLabel={findNodeLabel(editingEdge.source)}
           targetLabel={findNodeLabel(editingEdge.target)}
           seriesKeys={seriesKeys}
@@ -1201,16 +1370,28 @@ const TopologyInner: React.FC<InnerProps> = ({
           data={topology.nodes.find(n => n.id === editingNodeId)!.data as any}
           seriesKeys={seriesKeys}
           customImages={topology.customImages ?? []}
-          onAddCustomImage={(img) => {
+          onUploadImage={(img) => {
             if (!onOptionsChange) return;
-            const currentImages = topology.customImages ?? [];
-            if (currentImages.some((i) => i.url === img.url)) return;
+            const imgs = topology.customImages ?? [];
+            // Um save só, com o nó e a galeria: dois onOptionsChange seguidos
+            // partiam do mesmo `topology` e o segundo desfazia o primeiro — a
+            // imagem ia pra galeria, mas o ícone do nó não trocava.
             onOptionsChange({
               ...options,
               topology: {
                 ...topology,
-                customImages: [...currentImages, img],
+                nodes: topology.nodes.map((n) =>
+                  n.id === editingNodeId ? { ...n, data: { ...n.data, customIcon: img.url } } : n
+                ),
+                customImages: imgs.some((i) => i.url === img.url) ? imgs : [...imgs, img],
               },
+            });
+          }}
+          onRemoveImage={(url) => {
+            if (!onOptionsChange) return;
+            onOptionsChange({
+              ...options,
+              topology: { ...topology, customImages: (topology.customImages ?? []).filter((i) => i.url !== url) },
             });
           }}
           onChange={(patch) => setNodeDataPatch(editingNodeId, patch)}
@@ -1220,7 +1401,7 @@ const TopologyInner: React.FC<InnerProps> = ({
       )}
 
       {/* Editor em Massa (quando múltiplos nós estão selecionados no modo edição) */}
-      {options.editMode && nodes.filter(n => n.selected).length > 1 && (
+      {editMode && nodes.filter(n => n.selected).length > 1 && (
         <div
           style={{
             position: 'fixed',
@@ -1335,7 +1516,13 @@ const TopologyInner: React.FC<InnerProps> = ({
   );
 };
 
-const EditModeBanner: React.FC<{ onAddNode: () => void }> = ({ onAddNode }) => (
+/** `limpeza`: só com o modo público ligado e algo a limpar — ver utils/publicacao.
+ *  Dois cliques (o segundo confirma), porque apaga configuração. */
+const EditModeBanner: React.FC<{ onAddNode: () => void; limpeza?: { resumo: string; aplicar: () => void } }> = ({
+  onAddNode, limpeza,
+}) => {
+  const [confirma, setConfirma] = useState(false);
+  return (
   <div
     style={{
       position: 'absolute',
@@ -1360,34 +1547,60 @@ const EditModeBanner: React.FC<{ onAddNode: () => void }> = ({ onAddNode }) => (
     <button onClick={onAddNode} style={{ cursor: 'pointer', background: '#0f172a', color: '#f59e0b', border: 'none', padding: '6px 10px', borderRadius: 4, fontWeight: 'bold' }}>
       ➕ Adicionar Equipamento
     </button>
+    {limpeza && (
+      <button
+        onClick={() => {
+          if (!confirma) {
+            setConfirma(true);
+            return;
+          }
+          limpeza.aplicar();
+          setConfirma(false);
+        }}
+        onMouseLeave={() => setConfirma(false)}
+        title="Para a cópia pública: o JSON do dashboard vai inteiro pro navegador do visitante"
+        style={{
+          cursor: 'pointer', border: 'none', padding: '6px 10px', borderRadius: 4, fontWeight: 'bold', maxWidth: 320,
+          background: confirma ? '#b91c1c' : '#0f172a', color: confirma ? '#fff' : '#f59e0b', textAlign: 'left',
+        }}
+      >
+        {confirma ? `Confirmar: tirar ${limpeza.resumo}` : '🧹 Limpar dados privados (cópia pública)'}
+      </button>
+    )}
   </div>
-);
+  );
+};
 
-const Legend: React.FC = () => (
+/** As cores são as mesmas que as linhas usam no tema — inclusive o DOWN, que
+ *  vem da opção do painel. O cinza entrou: desde que ausência de dado deixou
+ *  de virar verde, ele é estado comum no mapa e não tinha explicação. */
+const Legend: React.FC<{ pal: Palette; downColor: string }> = ({ pal, downColor }) => (
   <div
     style={{
       position: 'absolute',
       bottom: 12,
       right: 12,
-      background: 'rgba(15, 23, 42, 0.85)',
-      border: '1px solid #334155',
+      background: pal.surface,
+      border: `1px solid ${pal.border}`,
       borderRadius: 6,
       padding: '8px 10px',
       fontSize: 11,
-      color: '#cbd5e1',
+      color: pal.text,
       zIndex: 10,
       pointerEvents: 'none',
       lineHeight: 1.6,
+      boxShadow: `0 2px 8px ${pal.shadow}`,
     }}
   >
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ width: 18, height: 3, background: '#22c55e', borderRadius: 1 }} /> link OK
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ width: 18, height: 3, background: '#f59e0b', borderRadius: 1 }} /> alto uso / warning
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ width: 18, height: 3, background: '#ef4444', borderRadius: 1 }} /> down
-    </div>
+    {([
+      [pal.line.up, 'link OK'],
+      [pal.line.warning, 'alto uso / warning'],
+      [ensureContrast(downColor, pal.canvas, 3), 'down'],
+      [pal.line.unknown, 'sem status'],
+    ] as const).map(([cor, rotulo]) => (
+      <div key={rotulo} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 18, height: 3, background: cor, borderRadius: 1 }} /> {rotulo}
+      </div>
+    ))}
   </div>
 );

@@ -1,0 +1,33 @@
+{
+  "origem": "grafana-inst-links (Links das Instituicoes)",
+  "commit": "f2aca4f",
+  "data": "2026-10-05",
+  "aviso": "Copia do cartao da origem. Nao edite a logica aqui: mudancas sao feitas na origem e o pacote inteiro e reexportado.",
+  "arquivos": {
+    "cartao/types.ts": "5daed175c76bad900966e17ea99b05311b6db6edd38ea57a6787396f7a6113c0",
+    "cartao/utils/alias.ts": "a0f5258c019a65bb2af1f3a3d481f39a68fb98e1393bab652e1b19f7d05f4838",
+    "cartao/utils/dados.ts": "23646f2c43cb8c2f4e07e56b2fb5a44e05ce1a776f33a3422ba5a0c6b71c7f74",
+    "cartao/utils/format.ts": "d05c9bf9af371188d90bbc61f7566a7c4a6d7d061d7732f142795d23ebd3cb8a",
+    "cartao/utils/historico.ts": "cd57bb519da3e74fdccac75d952c3611b6bf678185f9d89d5dca6e85169802fe",
+    "cartao/utils/optica.ts": "9d19c0c1a4f6a4f7f3d6484c03e833424a238d00bce2193fb5f04e176b3ddfef",
+    "cartao/utils/serie.ts": "7ac957d92080514e78b8a8384c07fa42324a68b5893d8e57821122dd0b4460bf",
+    "cartao/components/CartaoLink.tsx": "80b263ebb397a3cdbb478206bbdb285b15d9a254939e5bf85d98239b3e43d4a6",
+    "cartao/components/Optica.tsx": "ab9e54be5dd83c66a85007b1916f348e924e28054aad5cc3f644dc2500b38da1",
+    "cartao/components/Potencia.tsx": "c311b4fee6818d4ce5dc896535990647fa85d0c9bb520378f2807a2326d38a24",
+    "cartao/components/Trafego.tsx": "4619dadf4b9d1064fe0be2efeb804900de3752689f48151f7ea230f928998014",
+    "cartao/components/useLargura.ts": "da4d48948a11f44716d766a468a1a02d642d3eb403b46e5684c7ec15963bda53"
+  },
+  "sanitizado": {
+    "data": "2026-10-28",
+    "motivo": "repositorio publico: nomes da rede (instituicoes, aneis, ruas das rotas de fibra, equipamentos) trocados por exemplos genericos; as regras do formato antigo de description que dependiam desses nomes sairam do codigo e entram por configurarLegado() (utils/alias.ts); ORDEM_ANEL/posicaoAnel removidos (nao usados aqui). Os hashes abaixo sao desta copia sanitizada.",
+    "arquivosAlterados": [
+      "cartao/types.ts",
+      "cartao/utils/alias.ts",
+      "cartao/utils/dados.ts",
+      "cartao/utils/historico.ts",
+      "cartao/utils/optica.ts",
+      "cartao/components/CartaoLink.tsx",
+      "cartao/components/Optica.tsx"
+    ]
+  }
+}

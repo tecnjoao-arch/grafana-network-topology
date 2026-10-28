@@ -3,9 +3,11 @@
 
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { DeviceNodeData, DeviceType } from '../types';
+import { DeviceNodeData, DeviceType, ValueMapping } from '../types';
 import { MetricBinding, Aggregation } from '../utils/dataBinding';
 import { discoverHosts } from '../utils/discovery';
+import { LADO_MAX, TIPOS_DE_IMAGEM, prepararIcone } from '../utils/imagem';
+import { CorDaRegra } from './CorDaRegra';
 import { useEditor } from './EditorContext';
 import { SeriesCombo } from './SeriesCombo';
 
@@ -14,7 +16,11 @@ interface Props {
   data: DeviceNodeData;
   seriesKeys: string[];
   customImages?: Array<{ url: string; name: string }>;
-  onAddCustomImage?: (img: { url: string; name: string }) => void;
+  /** Imagem enviada (já conferida e reduzida): aplica no nó E guarda na
+   *  galeria — num save só. */
+  onUploadImage?: (img: { url: string; name: string }) => void;
+  /** Tira da galeria; os nós que já usam a imagem continuam com ela. */
+  onRemoveImage?: (url: string) => void;
   onChange: (patch: Partial<DeviceNodeData>) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -91,13 +97,15 @@ export const NodeEditor: React.FC<Props> = ({
   data,
   seriesKeys,
   customImages = [],
-  onAddCustomImage,
+  onUploadImage,
+  onRemoveImage,
   onChange,
   onDelete,
   onClose,
 }) => {
   const [showSeries, setShowSeries] = useState(false);
   const [hostPick, setHostPick] = useState('');
+  const [erroImagem, setErroImagem] = useState('');
   const { duplicateNode } = useEditor();
 
   // Hosts detectados → preenche nome + binding de status do equipamento
@@ -118,19 +126,25 @@ export const NodeEditor: React.FC<Props> = ({
     const next = { ...cur, ...patch };
     onChange({ statusBinding: next.match ? next : undefined });
   };
+  const regras = data.colorMappings ?? [];
+  const patchRegra = (idx: number, patch: Partial<ValueMapping>) =>
+    onChange({ colorMappings: regras.map((r, i) => (i === idx ? { ...r, ...patch } : r)) });
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = ''; // escolher o mesmo arquivo de novo também dispara
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const base64 = ev.target?.result as string;
-      onChange({ customIcon: base64 });
-      if (onAddCustomImage) {
-        onAddCustomImage({ url: base64, name: file.name });
-      }
-    };
-    reader.readAsDataURL(file);
+    const r = await prepararIcone(file);
+    if ('erro' in r) {
+      setErroImagem(r.erro);
+      return;
+    }
+    setErroImagem('');
+    if (onUploadImage) {
+      onUploadImage({ url: r.url, name: file.name });
+    } else {
+      onChange({ customIcon: r.url });
+    }
   };
 
   return createPortal(
@@ -243,13 +257,17 @@ export const NodeEditor: React.FC<Props> = ({
                   transition: 'background 0.2s',
                 }}>
                   📁 Escolher Nova Imagem
-                  <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
+                  <input type="file" accept={TIPOS_DE_IMAGEM.join(',')} onChange={handleImageUpload} style={{ display: 'none' }} />
                 </label>
+                <div style={{ fontSize: 10, color: '#94a3b8' }}>
+                  PNG, JPG, GIF, WebP ou SVG. Foto grande é reduzida pra {LADO_MAX} px.
+                </div>
+                {erroImagem && <div style={{ fontSize: 10.5, color: '#f87171' }}>{erroImagem}</div>}
 
                 {/* Galeria de miniaturas salvas */}
                 {customImages.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>Imagens já enviadas:</div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>Imagens já enviadas:</div>
                     <div style={{
                       display: 'grid',
                       gridTemplateColumns: 'repeat(4, 1fr)',
@@ -289,6 +307,22 @@ export const NodeEditor: React.FC<Props> = ({
                               objectFit: 'contain',
                             }}
                           />
+                          {onRemoveImage && (
+                            <button
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                onRemoveImage(img.url);
+                              }}
+                              title="Tirar da galeria (os equipamentos que já usam continuam com a imagem)"
+                              style={{
+                                position: 'absolute', top: 1, right: 1, width: 14, height: 14, padding: 0,
+                                fontSize: 9, lineHeight: '12px', borderRadius: 3, cursor: 'pointer',
+                                border: '1px solid #ef4444', background: '#0f172a', color: '#ef4444',
+                              }}
+                            >
+                              ✕
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -297,7 +331,7 @@ export const NodeEditor: React.FC<Props> = ({
 
                 {data.customIcon && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#151f32', padding: 6, borderRadius: 4, border: '1px solid #1e293b' }}>
-                    <span style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>Visualização:</span>
+                    <span style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>Visualização:</span>
                     <img src={data.customIcon} alt="preview" style={{ maxHeight: 40, objectFit: 'contain' }} />
                   </div>
                 )}
@@ -337,63 +371,42 @@ export const NodeEditor: React.FC<Props> = ({
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {/* Cabeçalho da tabela de Thresholds */}
-              <div style={{ display: 'grid', gridTemplateColumns: '24px 1fr 34px 24px', gap: 4, alignItems: 'center', fontSize: 10, color: '#64748b', fontWeight: 'bold', padding: '0 4px' }}>
-                <div>Rem</div>
-                <div>Valor Limite</div>
-                <div style={{ textAlign: 'center' }}>Cor</div>
-                <div style={{ textAlign: 'center' }}>Lvl</div>
-              </div>
-
-              {(data.colorMappings ?? []).map((mapping, idx) => (
-                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 34px 24px', gap: 4, alignItems: 'center', background: '#1e293b', padding: 4, borderRadius: 4 }}>
+              {regras.map((mapping, idx) => (
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#1e293b', padding: 6, borderRadius: 4 }}>
+                  <input
+                    type="text"
+                    placeholder="valor"
+                    value={mapping.value}
+                    onChange={(e) => patchRegra(idx, { value: e.target.value })}
+                    style={{ ...inputText, width: 44, flex: 'none', padding: '3px 4px', fontSize: 11 }}
+                  />
+                  <CorDaRegra color={mapping.color} onChange={(color) => patchRegra(idx, { color })} />
                   <button
-                    onClick={() => {
-                      const list = (data.colorMappings ?? []).filter((_, i) => i !== idx);
-                      onChange({ colorMappings: list });
-                    }}
-                    style={{ ...btnReset, borderColor: '#ef4444', color: '#ef4444', padding: '2px', textAlign: 'center', width: '100%', fontSize: 10 }}
+                    onClick={() => onChange({ colorMappings: regras.filter((_, i) => i !== idx) })}
+                    title="Remover regra"
+                    style={{ ...btnReset, borderColor: '#ef4444', color: '#ef4444', padding: '2px 6px', fontSize: 10 }}
                   >
                     ✕
                   </button>
-                  <input
-                    type="text"
-                    placeholder="Valor"
-                    value={mapping.value}
-                    onChange={(e) => {
-                      const list = [...(data.colorMappings ?? [])];
-                      list[idx] = { ...list[idx], value: e.target.value };
-                      onChange({ colorMappings: list });
-                    }}
-                    style={{ ...inputText, width: '100%', padding: '3px 4px', fontSize: 11 }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <input
-                      type="color"
-                      value={mapping.color}
-                      onChange={(e) => {
-                        const list = [...(data.colorMappings ?? [])];
-                        list[idx] = { ...list[idx], color: e.target.value };
-                        onChange({ colorMappings: list });
-                      }}
-                      style={{ width: 20, height: 20, cursor: 'pointer', border: 'none', background: 'transparent', padding: 0 }}
-                    />
-                  </div>
-                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 11, color: '#3b82f6' }}>
-                    {idx}
-                  </div>
                 </div>
               ))}
-              
+
+              {/* Regra nova nasce CINZA: com o valor digitado e a cor esquecida, o
+                  nó fica "sem status" — nem inventa queda (vermelho derruba os
+                  links dele) nem esconde uma (verde). */}
               <button
-                onClick={() => {
-                  const list = [...(data.colorMappings ?? []), { value: '', color: '#ef4444' }];
-                  onChange({ colorMappings: list });
-                }}
+                onClick={() => onChange({ colorMappings: [...regras, { value: '', color: '#64748b' }] })}
                 style={{ ...btnReset, width: '100%', borderStyle: 'dashed', background: 'transparent', color: '#3b82f6', borderColor: '#3b82f6', marginTop: 4 }}
               >
                 ➕ Adicionar Regra
               </button>
+
+              <div style={{ fontSize: 10, color: '#94a3b8', lineHeight: 1.45 }}>
+                A cor diz o que o valor significa: <b style={{ color: '#f87171' }}>vermelho</b> = equipamento caído
+                (apaga os links dele) · <b style={{ color: '#fbbf24' }}>âmbar/laranja</b> = alerta ·{' '}
+                <b style={{ color: '#cbd5e1' }}>cinza</b> = sem status · as demais = no ar. Valor sem regra fica sem
+                status; sem nenhuma regra, maior que 0 = no ar.
+              </div>
             </div>
           </div>
 
@@ -403,7 +416,7 @@ export const NodeEditor: React.FC<Props> = ({
           {showSeries && (
             <div style={{ marginTop: 6, maxHeight: 100, overflowY: 'auto', background: '#0b1220', border: '1px solid #334155', borderRadius: 4, padding: 6 }}>
               {seriesKeys.length === 0 && (
-                <div style={{ fontSize: 11, color: '#64748b' }}>Nenhuma série encontrada.</div>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>Nenhuma série encontrada.</div>
               )}
               {seriesKeys.map((k, i) => (
                 <div key={i} style={{ fontSize: 10.5, fontFamily: 'monospace', color: '#94a3b8', padding: '2px 0', borderBottom: '1px solid #1e293b', wordBreak: 'break-all' }}>
@@ -469,7 +482,7 @@ export const NodeEditor: React.FC<Props> = ({
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div>
-    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>{title}</div>
+    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>{title}</div>
     {children}
   </div>
 );

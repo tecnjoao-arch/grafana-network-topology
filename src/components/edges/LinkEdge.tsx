@@ -10,7 +10,9 @@ import { LinkEdgeData, LabelFooter } from '../../types';
 import { formatBitsPerSec, linkUtilization, splitIps, canonicalizeIpv6, shortenIpv6 } from '../../utils/format';
 import { evalOptical, rxThresholds, txThresholds, OpticalLevel } from '../../utils/optics';
 import { getEdgeParams } from '../../utils/floatingEdge';
+import { Palette, paletteFor, ensureContrast } from '../../utils/theme';
 import { useEditor } from '../EditorContext';
+import { useCopiado } from '../useCopiado';
 
 interface Props extends EdgeProps {
   data: LinkEdgeData;
@@ -99,7 +101,10 @@ function ptsToPath(pts: Pt[]): string {
 export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }) => {
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
-  const { editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, openLinkDetails, hoverLink, unhoverLink } = useEditor();
+  const { editMode, setEdgeWaypoints, setEdgeAnchor, setEdgeData, openLinkDetails, hoverLink, unhoverLink, theme, publicMode } = useEditor();
+  const pal = paletteFor(theme);
+  // Modo público fora do editor: o card mostra só tráfego e capacidade
+  const publico = !!publicMode && !editMode;
   const { screenToFlowPosition } = useReactFlow();
 
   // Quais cards exibir. Esconder é só visual — antes, a única forma de ocultar
@@ -204,13 +209,15 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
 
   const status = data?.status ?? 'unknown';
   const util = linkUtilization(Math.max(data?.trafficUp ?? 0, data?.trafficDown ?? 0), data?.linkSpeed);
-  const autoColor =
-    status === 'down' ? '#ef4444' :
-    status === 'warning' ? '#f59e0b' :
-    status === 'up' && util >= 0.9 ? '#f59e0b' :
-    status === 'up' ? '#22c55e' :
-    '#64748b';
-  const color = data?.color ?? autoColor;
+  const autoStatus: typeof status = status === 'up' && util >= 0.9 ? 'warning' : status;
+  // Cor da linha: da paleta do tema, ou a fixada (usuário, regra de cor,
+  // aparência do DOWN) com piso de 3:1 sobre o fundo do mapa. O texto do card
+  // tem piso de 4,5:1 sobre o card: a mesma cor da linha, num tom legível.
+  // O piso mantém o matiz — só escurece/clareia o necessário.
+  const color = ensureContrast(data?.color ?? pal.line[autoStatus], pal.canvas, 3);
+  const textColor = data?.color
+    ? ensureContrast(data.color, pal.surface, 4.5)
+    : pal.statusText[autoStatus];
   const strokeWidth = data?.lineWidth ?? (3 + util * 4);
 
   // Traçado e animação são independentes. Defaults pelo status se não definidos.
@@ -253,7 +260,9 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
   // Escala da fonte aumenta o card; o afastamento precisa crescer junto, senão os
   // labels colidem e a linha parece "torta". Cap em ~45% do cabo p/ não cruzar o meio.
   const fontScale = ((data as any)?.fontScale as number) ?? 1;
-  const OFF = Math.min(OFFbase * fontScale, totalLength * 0.45);
+  // Escala só dos cards (opção à parte): card maior, afastado na mesma proporção
+  const cardScale = ((data as any)?.cardScale as number) ?? 1;
+  const OFF = Math.min(OFFbase * fontScale * cardScale, totalLength * 0.45);
   
   // Posição final do card = ponto na linha + deslocamento manual (arrastável)
   const srcLabelPos = { x: sp.x + s1.ux * OFF + (localSrcOff?.x ?? 0), y: sp.y + s1.uy * OFF + (localSrcOff?.y ?? 0) };
@@ -387,8 +396,10 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
 
   return (
     <g style={{ opacity: edgeOpacity, transition: 'opacity 0.2s ease-in-out' }}>
-      {/* Halo: status down, selecionado, ou animação glow */}
-      {(status === 'down' || selected || glow || isGlowingSearch) && (
+      {/* Halo: status down, selecionado, animação glow ou pulse. No pulse é o
+          halo que respira: a linha só cai a 75% — a 40%, como era, o link
+          DOWN sumia do fundo metade do tempo (1,7:1). */}
+      {(status === 'down' || selected || glow || isGlowingSearch || animation === 'pulse') && (
         <path
           d={edgePath}
           fill="none"
@@ -398,7 +409,8 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
           strokeLinecap="round"
           style={{
             filter: `blur(${glow || isGlowingSearch ? 4 : 2}px)`,
-            animation: (glow || isGlowingSearch) ? 'fc-glow 1.6s ease-in-out infinite' : undefined,
+            animation: (glow || isGlowingSearch) ? 'fc-glow 1.6s ease-in-out infinite'
+              : animation === 'pulse' ? 'fc-halo 1.2s ease-in-out infinite' : undefined,
           }}
         />
       )}
@@ -509,20 +521,23 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
           </>
         )}
 
-        {data?.sourceInterface && showSourceCard && (
+        {data?.sourceInterface && showSourceCard && (!publico || (!!data.showTrafficBox && !data.hideTrafficBox)) && (
           <IfLabel
-            text={data.sourceInterface}
-            ip={data.showIp ? data.sourceIp : undefined}
-            errors={data.sourceErrors}
+            text={publico ? '' : data.sourceInterface}
+            ip={data.showIp && !publico ? data.sourceIp : undefined}
+            errors={publico ? undefined : data.sourceErrors}
             tx={data.sourceTrafficUp}
             rx={data.sourceTrafficDown}
             speed={data.linkSpeed}
             domTx={data.sourceDomTxPower}
             domRx={data.sourceDomRxPower}
-            footer={data.labelFooter ?? 'speed'}
+            footer={publico ? 'speed' : (data.labelFooter ?? 'speed')}
             x={srcLabelPos.x}
             y={srcLabelPos.y}
             color={color}
+            textColor={textColor}
+            pal={pal}
+            escala={cardScale}
             showTraffic={!!data.showTrafficBox && !data.hideTrafficBox}
             shortIpv6={!!data.shortIpv6}
             draggable={editMode}
@@ -537,20 +552,23 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
             rxLevel={srcRxLevel}
           />
         )}
-        {data?.targetInterface && showTargetCard && (
+        {data?.targetInterface && showTargetCard && (!publico || (!!data.showTrafficBox && !data.hideTrafficBox)) && (
           <IfLabel
-            text={data.targetInterface}
-            ip={data.showIp ? data.targetIp : undefined}
-            errors={data.targetErrors}
+            text={publico ? '' : data.targetInterface}
+            ip={data.showIp && !publico ? data.targetIp : undefined}
+            errors={publico ? undefined : data.targetErrors}
             tx={data.targetTrafficUp}
             rx={data.targetTrafficDown}
             speed={data.linkSpeed}
             domTx={data.targetDomTxPower}
             domRx={data.targetDomRxPower}
-            footer={data.labelFooter ?? 'speed'}
+            footer={publico ? 'speed' : (data.labelFooter ?? 'speed')}
             x={tgtLabelPos.x}
             y={tgtLabelPos.y}
             color={color}
+            textColor={textColor}
+            pal={pal}
+            escala={cardScale}
             showTraffic={!!data.showTrafficBox && !data.hideTrafficBox}
             shortIpv6={!!data.shortIpv6}
             draggable={editMode}
@@ -606,7 +624,11 @@ const IfLabel: React.FC<{
   footer?: LabelFooter;
   x: number;
   y: number;
+  /** Cor da linha: borda do card */
   color: string;
+  /** A mesma cor num tom legível sobre o card: nome da interface */
+  textColor: string;
+  pal: Palette;
   showTraffic: boolean;
   /** Modo edição: card arrastável (reposicionamento manual) */
   draggable?: boolean;
@@ -625,15 +647,18 @@ const IfLabel: React.FC<{
   /** Avaliação da potência contra os limiares reais (colore e marca ⚠) */
   txLevel?: OpticalLevel;
   rxLevel?: OpticalLevel;
-}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, showTraffic, shortIpv6, draggable, onDragDown, onDragMove, onDragUp, onOpenDetails, onHover, onHoverEnd, dim, txLevel, rxLevel }) => {
+  /** Escala só dos cards (PanelOptions.cardScale) */
+  escala?: number;
+}> = ({ text, ip, errors, tx, rx, speed, domTx, domRx, footer = 'speed', x, y, color, textColor, pal, showTraffic, shortIpv6, draggable, onDragDown, onDragMove, onDragUp, onOpenDetails, onHover, onHoverEnd, dim, txLevel, rxLevel, escala = 1 }) => {
   // Copiar por endereço (IPv4 e IPv6 são linhas separadas no card)
-  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [copiedIdx, copiar] = useCopiado<number>();
   const copyAddr = (addr: string, idx: number) => (e: React.MouseEvent) => {
     e.stopPropagation(); // não abrir o modal ao copiar IP
-    navigator.clipboard.writeText(addr);
-    setCopiedIdx(idx);
-    setTimeout(() => setCopiedIdx(null), 1500);
+    copiar(addr, idx);
   };
+
+  // Nada a mostrar (modo público num link sem tráfego medido): sem caixa vazia
+  if (!text && !ip && !(showTraffic && (tx !== undefined || rx !== undefined))) return null;
 
   return (
     <div
@@ -651,12 +676,15 @@ const IfLabel: React.FC<{
         transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`,
         opacity: dim ? 0.35 : 1,
         cursor: draggable ? 'grab' : (onOpenDetails ? 'pointer' : undefined),
-        // em (não px): acompanha a opção "Escala da fonte" do painel (TV de NOC).
-        // Setas (↓/↑) no lugar de "In/Out" liberam espaço → fonte um pouco maior.
-        fontSize: '0.74em',
-        color,
+        // em (não px): acompanha a opção "Escala da fonte" do painel (TV de NOC),
+        // vezes a "Escala dos cards". Setas (↓/↑) no lugar de "In/Out" liberam
+        // espaço → fonte um pouco maior.
+        fontSize: `${0.74 * escala}em`,
+        color: textColor,
         fontFamily: 'monospace',
-        background: 'rgba(15, 23, 42, 0.95)',
+        // Opaco: com 5% de transparência o fundo claro vazava e derrubava o
+        // contraste do texto do card no tema claro.
+        background: pal.surface,
         padding: '0.35em 0.65em',
         borderRadius: 4,
         pointerEvents: 'all', // Permitir clique
@@ -667,16 +695,19 @@ const IfLabel: React.FC<{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+        boxShadow: `0 2px 6px ${pal.shadow}`,
         lineHeight: 1.1,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontWeight: 'bold' }}>
-        <span>{text}</span>
-        {!!errors && errors > 0 && (
-          <span title={`${errors} erros na interface`} style={{ cursor: 'help', fontSize: '1.2em' }}>⚠️</span>
-        )}
-      </div>
+      {/* Sem título no modo público: o nome da interface fica fora da página */}
+      {text && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontWeight: 'bold' }}>
+          <span>{text}</span>
+          {!!errors && errors > 0 && (
+            <span title={`${errors} erros na interface`} style={{ cursor: 'help', fontSize: '1.2em' }}>⚠️</span>
+          )}
+        </div>
+      )}
       {ip && splitIps(ip).map((addr, idx) => (
         // IPv4 na primeira linha, IPv6 (mais longo) menor na linha de baixo.
         // O IPv6 é normalizado (e abreviado, se a opção estiver ligada) só na
@@ -686,7 +717,7 @@ const IfLabel: React.FC<{
           onClick={copyAddr(addr, idx)}
           title={addr}
           style={{
-            color: copiedIdx === idx ? '#4ade80' : '#22d3ee',
+            color: copiedIdx === idx ? pal.ok : pal.ip,
             fontSize: idx === 0 ? '0.9em' : '0.78em',
             marginTop: idx === 0 ? 2 : 1,
             cursor: 'pointer',
@@ -700,26 +731,30 @@ const IfLabel: React.FC<{
         </span>
       ))}
       {showTraffic && (tx !== undefined || rx !== undefined) && (
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 3, paddingTop: 3, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.95em', width: '100%' }}>
-          <div style={{ color: '#22c55e', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+        <div style={{
+          // O divisor só separa o tráfego do que vem em cima (nome, IP)
+          ...(text || ip ? { borderTop: `1px solid ${pal.divider}`, marginTop: 3, paddingTop: 3 } : {}),
+          display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.95em', width: '100%',
+        }}>
+          <div style={{ color: pal.inbound, display: 'flex', justifyContent: 'space-between', gap: 6 }}>
             <span style={{ fontWeight: 700 }}>↓</span> <span>{formatBitsPerSec(tx)}</span>
           </div>
-          <div style={{ color: '#3b82f6', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+          <div style={{ color: pal.outbound, display: 'flex', justifyContent: 'space-between', gap: 6 }}>
             <span style={{ fontWeight: 700 }}>↑</span> <span>{formatBitsPerSec(rx)}</span>
           </div>
           {(footer === 'speed' || footer === 'both') && speed !== undefined && (
-            <div style={{ color: '#94a3b8', fontSize: '0.88em', borderTop: '1px dashed rgba(255,255,255,0.05)', marginTop: 2, paddingTop: 2, textAlign: 'center' }}>
+            <div style={{ color: pal.textMuted, fontSize: '0.88em', borderTop: `1px dashed ${pal.divider}`, marginTop: 2, paddingTop: 2, textAlign: 'center' }}>
               {formatBitsPerSec(speed)}
             </div>
           )}
           {(footer === 'fiber' || footer === 'both') && (domTx !== undefined || domRx !== undefined) && (
             // Cores de identidade (Tx verde/Rx azul) preservadas; warn/alarm sobrescrevem
-            <div style={{ borderTop: '1px dashed rgba(255,255,255,0.05)', marginTop: 2, paddingTop: 2, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.94em' }}>
-              <div style={{ color: txLevel === 'alarm' ? '#ef4444' : txLevel === 'warn' ? '#facc15' : '#4ade80', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+            <div style={{ borderTop: `1px dashed ${pal.divider}`, marginTop: 2, paddingTop: 2, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.94em' }}>
+              <div style={{ color: txLevel === 'alarm' ? pal.alarm : txLevel === 'warn' ? pal.warn : pal.tx, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
                 <span>Tx{txLevel === 'warn' || txLevel === 'alarm' ? ' ⚠' : ''}</span>
                 <span>{domTx !== undefined ? `${domTx.toFixed(2)} dBm` : '—'}</span>
               </div>
-              <div style={{ color: rxLevel === 'alarm' ? '#ef4444' : rxLevel === 'warn' ? '#facc15' : '#60a5fa', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+              <div style={{ color: rxLevel === 'alarm' ? pal.alarm : rxLevel === 'warn' ? pal.warn : pal.rx, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
                 <span>Rx{rxLevel === 'warn' || rxLevel === 'alarm' ? ' ⚠' : ''}</span>
                 <span>{domRx !== undefined ? `${domRx.toFixed(2)} dBm` : '—'}</span>
               </div>

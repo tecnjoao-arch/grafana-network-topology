@@ -11,17 +11,25 @@ export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
       .addBooleanSwitch({
         path: 'editMode',
         name: 'Modo edição',
-        description: 'Ativa arrastar nós com o mouse. Posições são salvas automaticamente.',
+        description: 'Arrastar nós, ligar equipamentos e abrir os editores. Só vale aqui no editor do painel: no dashboard o mapa é sempre de visualização, mesmo com esta opção ligada.',
         defaultValue: DEFAULT_OPTIONS.editMode,
+        category: ['Edição'],
+      })
+      .addBooleanSwitch({
+        path: 'publicMode',
+        name: 'Modo público (internet)',
+        description: 'Só tráfego, status e capacidade. Esconde IPs, nomes de interface, causa do status, botões, testes de rede e links, e nada abre ao clicar. Use numa cópia do dashboard dedicada à página pública.',
+        defaultValue: DEFAULT_OPTIONS.publicMode,
         category: ['Edição'],
       })
       .addRadio({
         path: 'theme',
         name: 'Tema',
-        description: 'Dark recomendado para NOC TVs.',
+        description: 'Seguir o Grafana: o mapa fica claro ou escuro junto com o Grafana. Dark fixo é o recomendado para NOC TVs.',
         defaultValue: DEFAULT_OPTIONS.theme,
         settings: {
           options: [
+            { value: 'auto', label: 'Seguir o Grafana' },
             { value: 'dark', label: 'Dark' },
             { value: 'light', label: 'Light' },
           ],
@@ -31,9 +39,17 @@ export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
       .addSliderInput({
         path: 'fontScale',
         name: 'Escala da fonte',
-        description: 'Aumenta tudo proporcionalmente — útil para TVs grandes.',
+        description: 'Aumenta tudo proporcionalmente — útil para TVs grandes. Os equipamentos crescem junto e as rotas desenhadas à mão podem entortar; para só deixar os cards maiores, use a escala dos cards.',
         defaultValue: DEFAULT_OPTIONS.fontScale,
         settings: { min: 0.6, max: 2.5, step: 0.1 },
+        category: ['Visual'],
+      })
+      .addSliderInput({
+        path: 'cardScale',
+        name: 'Escala dos cards',
+        description: 'Só os cards de tráfego dos links — não mexe nos equipamentos nem nas rotas.',
+        defaultValue: DEFAULT_OPTIONS.cardScale,
+        settings: { min: 0.8, max: 2, step: 0.1 },
         category: ['Visual'],
       })
       .addBooleanSwitch({

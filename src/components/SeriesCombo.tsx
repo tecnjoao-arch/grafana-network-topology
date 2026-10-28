@@ -3,7 +3,7 @@
 // que diferencia os itens fica no final) e não tinha barra de rolagem.
 
 import React, { useMemo, useRef, useState } from 'react';
-import { stableMatch } from '../utils/dataBinding';
+import { regexArriscada, stableMatch } from '../utils/dataBinding';
 
 export const SeriesCombo: React.FC<{
   value: string;
@@ -48,6 +48,9 @@ export const SeriesCombo: React.FC<{
     : options;
   const width = Math.min(480, (typeof window !== 'undefined' ? window.innerWidth : 480) - 24);
   const left = anchor ? Math.max(8, anchor.right - width) : 0;
+  // O casamento ignora a regex arriscada (dataBinding.regexArriscada): avisa
+  // aqui, senão o binding só "não acha" a série sem dizer por quê.
+  const arriscada = useMemo(() => regexArriscada(value), [value]);
 
   return (
     <>
@@ -60,7 +63,10 @@ export const SeriesCombo: React.FC<{
         onFocus={openList}
         onBlur={() => setOpen(false)}
         onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') setOpen(false); }}
-        style={inputStyle}
+        title={arriscada ? 'Expressão regular arriscada (pode travar o navegador): vale só como texto' : undefined}
+        // `border` inteiro, não `borderColor`: o React, ao tirar o borderColor,
+        // apagaria a cor que o `border` do inputStyle tinha posto
+        style={arriscada ? { ...inputStyle, border: '1px solid #f59e0b' } : inputStyle}
       />
       {open && anchor && filtered.length > 0 && (
         // position:fixed escapa do overflow do painel do editor (que tem scroll próprio)
@@ -82,7 +88,7 @@ export const SeriesCombo: React.FC<{
             </div>
           ))}
           {filtered.length > 150 && (
-            <div style={{ ...itemStyle, color: '#64748b', cursor: 'default' }}>
+            <div style={{ ...itemStyle, color: '#94a3b8', cursor: 'default' }}>
               … mais {filtered.length - 150} séries — digite para filtrar
             </div>
           )}
