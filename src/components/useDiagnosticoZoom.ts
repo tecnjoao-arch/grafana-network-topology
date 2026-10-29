@@ -17,6 +17,9 @@
 // com as linhas numa camada só (will-change), mas a linha "base" também — cai
 // só às vezes, sempre no mesmo passo (~5 s depois de abrir). ?diag=confirma
 // repete o mapa completo com e sem a correção.
+//
+// Com a correção, a animação das linhas voltou na teste.22 e o iPhone voltou a
+// cair, até sem zoom: no iOS ela ficou desligada (useModoLeve).
 
 import { useEffect, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
@@ -59,14 +62,32 @@ const SUITES: Record<string, Rodada[]> = {
   ]),
 };
 
+function suiteDaUrl(): string {
+  try { return new URLSearchParams(window.location.search).get('diag') ?? ''; } catch { return ''; }
+}
+
+/** Um por carregamento da página: anotação desta mesma página = o painel só
+ *  remontou (não caiu) */
+const PAGINA = Math.random().toString(36).slice(2);
+
+/** A página anterior parou no meio da rodada (o Safari a derrubou) */
+const caiu = (e: Estado | null): e is Estado => !!e && e.zoom !== null && e.pagina !== PAGINA;
+
+function lerEstado(chave: string): Estado | null {
+  try { return JSON.parse(localStorage.getItem(chave) ?? 'null'); } catch { return null; }
+}
+
 const PASSO = 1.25;
 const ZOOM_MAX = 4;
 const ESPERA_PASSO_MS = 900;
 
 interface Estado {
   rodada: number;
-  /** Zoom do passo em andamento; null = nenhum (a rodada não começou ou acabou) */
+  /** Zoom do passo em andamento; 0 = a rodada abriu e ainda não deu zoom;
+   *  null = nenhum (a rodada não começou ou acabou) */
   zoom: number | null;
+  /** PAGINA de quem anotou o passo */
+  pagina?: string;
   resultados: Record<string, string>;
 }
 
@@ -80,13 +101,11 @@ export interface Diagnostico {
 }
 
 export function useDiagnosticoZoom(prontos: boolean): Diagnostico {
-  const suite = (() => { try { return new URLSearchParams(window.location.search).get('diag') ?? ''; } catch { return ''; } })();
+  const suite = suiteDaUrl();
   const rodadas = SUITES[suite];
   const ativo = !!rodadas;
   const chave = `fc-diag-zoom-${suite}`;
-  const ler = (): Estado | null => {
-    try { return JSON.parse(localStorage.getItem(chave) ?? 'null'); } catch { return null; }
-  };
+  const ler = () => lerEstado(chave);
   const gravar = (e: Estado) => {
     try { localStorage.setItem(chave, JSON.stringify(e)); } catch { /* sem armazenamento: o teste não sobrevive à queda */ }
   };
@@ -98,10 +117,16 @@ export function useDiagnosticoZoom(prontos: boolean): Diagnostico {
   useEffect(() => {
     if (!ativo) return;
     let e = ler() ?? { rodada: 0, zoom: null, resultados: {} };
-    if (e.zoom !== null && e.rodada < rodadas.length) {
-      e = { rodada: e.rodada + 1, zoom: null, resultados: { ...e.resultados, [rodadas[e.rodada].id]: `CAIU no zoom ${e.zoom.toFixed(2)}` } };
-      gravar(e);
+    if (caiu(e) && e.rodada < rodadas.length) {
+      const queda = e.zoom === 0 ? 'CAIU antes do zoom' : `CAIU no zoom ${e.zoom!.toFixed(2)}`;
+      e = { rodada: e.rodada + 1, zoom: null, resultados: { ...e.resultados, [rodadas[e.rodada].id]: queda } };
+    } else {
+      e = { ...e, zoom: null };
     }
+    // A rodada começa a contar já ao abrir. Antes só o primeiro passo de zoom
+    // era anotado: no iPhone com a animação a página caía antes dele, voltava
+    // na mesma rodada e caía de novo, sem fim (teste.23).
+    gravar(e.rodada < rodadas.length ? { ...e, zoom: 0, pagina: PAGINA } : e);
     setEstado(e);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ativo]);
@@ -116,7 +141,7 @@ export function useDiagnosticoZoom(prontos: boolean): Diagnostico {
       let z = getZoom();
       while (!parado && z < ZOOM_MAX) {
         z = Math.min(ZOOM_MAX, z * PASSO);
-        gravar({ ...estado, zoom: z });
+        gravar({ ...estado, zoom: z, pagina: PAGINA });
         setAgora(`rodada ${estado.rodada + 1}/${rodadas.length} (${r.nome}) — zoom ${z.toFixed(2)}`);
         zoomTo(z, { duration: 0 });
         await new Promise((ok) => setTimeout(ok, ESPERA_PASSO_MS));

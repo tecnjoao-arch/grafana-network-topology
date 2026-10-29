@@ -203,7 +203,8 @@ const floatBtn = (pal: Palette): React.CSSProperties => ({
  *  Safari isso ia ao limite de memória e o zoom às vezes derrubava a página
  *  (no iPhone com iOS 18.7, 4 de 6 rodadas com as linhas normais caíram no
  *  zoom 0,46; as 2 com as linhas numa camada só aguentaram até 4× — ver
- *  useDiagnosticoZoom, ?diag=confirma). */
+ *  useDiagnosticoZoom, ?diag=confirma). Isso sem animação: com ela (teste.22)
+ *  a página voltou a cair, e no iOS as linhas ficam paradas (useModoLeve). */
 const IOS = ehIOS();
 
 const nodeTypes = { device: DeviceNode };

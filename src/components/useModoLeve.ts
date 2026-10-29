@@ -1,10 +1,10 @@
 // components/useModoLeve.ts — Animação das linhas e interruptores de diagnóstico.
 //
 // A opção "Animar links" desligada deixa as linhas paradas (antes ela não
-// estava ligada a nada). Entre a teste.18 e a 21 o celular também ficava sem
-// animação: era a suspeita de o iPhone recarregar a página ao dar zoom. O
-// diagnóstico no aparelho mostrou que a causa eram as linhas em camadas
-// separadas (ver IOS em TopologyPanel), não a animação — ela voltou.
+// estava ligada a nada). No iPhone/iPad as linhas ficam sempre paradas: com a
+// correção das linhas numa camada só (ver IOS em TopologyPanel) o zoom aguenta
+// até 4× sem animação (teste.21, ?diag=confirma), mas a teste.22 religou a
+// animação lá e a página voltou a recarregar, até sem zoom.
 //
 // Para investigar no próprio aparelho, pela URL (?diag=a,b):
 //   parado     — linhas sem animação
@@ -30,17 +30,18 @@ function chavesDeDiagnostico(): Set<string> {
 }
 
 export interface ModoLeve {
-  /** Linhas sem animação ("Animar links" desligado, ou ?diag=parado) */
+  /** Linhas sem animação ("Animar links" desligado, iPhone/iPad, ou ?diag=parado) */
   semAnimacao: boolean;
   semSombra: boolean;
   semCards: boolean;
 }
 
 export function useModoLeve(animarLinks: boolean | undefined): ModoLeve {
-  // Lida uma vez: a URL de diagnóstico não muda com o mapa aberto
+  // Lidos uma vez: a URL de diagnóstico e o aparelho não mudam com o mapa aberto
   const [diag] = useState(chavesDeDiagnostico);
+  const [paradoNoIOS] = useState(ehIOS);
   return {
-    semAnimacao: animarLinks === false || diag.has('parado'),
+    semAnimacao: animarLinks === false || paradoNoIOS || diag.has('parado'),
     semSombra: diag.has('sem-sombra'),
     semCards: diag.has('sem-cards'),
   };

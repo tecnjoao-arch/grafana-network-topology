@@ -63,7 +63,7 @@ export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
       .addBooleanSwitch({
         path: 'animateLinks',
         name: 'Animar links',
-        description: 'Luz correndo nas arestas ativas.',
+        description: 'Luz correndo nas arestas ativas. No iPhone/iPad fica sempre desligada: lá a animação fazia a página recarregar ao dar zoom.',
         defaultValue: DEFAULT_OPTIONS.animateLinks,
         category: ['Visual'],
       })
