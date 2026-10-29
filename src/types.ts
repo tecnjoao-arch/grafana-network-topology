@@ -326,6 +326,12 @@ export interface NetworkTopology {
   customImages?: Array<{ url: string; name: string }>;
 }
 
+/** Um item da legenda: a cor da linha e o que ela quer dizer no mapa. */
+export interface LegendItem {
+  color: string;
+  label: string;
+}
+
 /** Opções do painel (persistidas no JSON do Grafana) */
 export interface PanelOptions {
   topology: NetworkTopology;
@@ -350,6 +356,9 @@ export interface PanelOptions {
   editMode: boolean;
   /** Mostrar legenda de cores no canto */
   showLegend: boolean;
+  /** Itens da legenda (cor → texto), editados nas opções. Ausente = a legenda
+   *  padrão (link OK, alerta, down, sem status) nas cores do tema. */
+  legendItems?: LegendItem[];
   /** Segundos sem atualização para considerar uma métrica obsoleta (status cai). 0 desativa. */
   staleThresholdSec: number;
   /** Nó down apaga (esmaece) os links adjacentes */

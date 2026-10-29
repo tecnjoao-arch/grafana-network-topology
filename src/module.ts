@@ -2,6 +2,7 @@
 
 import { PanelPlugin } from '@grafana/data';
 import { TopologyPanel } from './components/TopologyPanel';
+import { LegendaEditor } from './components/LegendaEditor';
 import { PanelOptions, DEFAULT_OPTIONS } from './types';
 
 export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
@@ -70,6 +71,15 @@ export const plugin = new PanelPlugin<PanelOptions>(TopologyPanel)
         path: 'showLegend',
         name: 'Mostrar legenda',
         defaultValue: DEFAULT_OPTIONS.showLegend,
+        category: ['Visual'],
+      })
+      .addCustomEditor({
+        id: 'legendItems',
+        path: 'legendItems',
+        name: 'Itens da legenda',
+        description: 'O texto e a cor de cada linha da legenda. Adicione quantas cores quiser — por exemplo, a cor que você usa nas regras de um tipo de link.',
+        editor: LegendaEditor,
+        showIf: (o) => o.showLegend,
         category: ['Visual'],
       })
       .addBooleanSwitch({

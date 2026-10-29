@@ -8,7 +8,10 @@ import { CORES_DE_REGRA } from '../utils/status';
 export const CorDaRegra: React.FC<{
   color?: string;
   onChange: (color: string) => void;
-}> = ({ color, onChange }) => (
+  /** Borda da cor escolhida. Branca nos editores do mapa (fundo escuro); nas
+   *  opções do painel vem do tema do Grafana, que pode ser claro. */
+  marcada?: string;
+}> = ({ color, onChange, marcada = '#fff' }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, flexWrap: 'wrap' }}>
     {CORES_DE_REGRA.map((c) => (
       <button
@@ -17,7 +20,7 @@ export const CorDaRegra: React.FC<{
         onClick={() => onChange(c.color)}
         style={{
           width: 16, height: 16, padding: 0, borderRadius: 3, cursor: 'pointer', background: c.color,
-          border: (color ?? '').toLowerCase() === c.color ? '2px solid #fff' : '1px solid #334155',
+          border: (color ?? '').toLowerCase() === c.color ? `2px solid ${marcada}` : '1px solid #334155',
         }}
       />
     ))}

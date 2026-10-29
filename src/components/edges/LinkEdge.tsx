@@ -10,6 +10,7 @@ import { LinkEdgeData, LabelFooter } from '../../types';
 import { formatBitsPerSec, linkUtilization, splitIps, canonicalizeIpv6, shortenIpv6 } from '../../utils/format';
 import { evalOptical, rxThresholds, txThresholds, OpticalLevel } from '../../utils/optics';
 import { getEdgeParams } from '../../utils/floatingEdge';
+import { ancoraNaBorda, caixaDoNo, imaNoZoom } from '../../utils/ancora';
 import { Palette, paletteFor, ensureContrast } from '../../utils/theme';
 import { useEditor } from '../EditorContext';
 import { useCopiado } from '../useCopiado';
@@ -33,14 +34,6 @@ function nodeBox(node: any) {
 function anchorToPoint(node: any, a: Pt): Pt {
   const b = nodeBox(node);
   return { x: b.x + a.x * b.w, y: b.y + a.y * b.h };
-}
-
-/** Converte um ponto absoluto em fração 0..1 relativa ao nó (clamp). */
-function pointToAnchor(node: any, p: Pt): Pt {
-  const b = nodeBox(node);
-  const fx = b.w ? (p.x - b.x) / b.w : 0.5;
-  const fy = b.h ? (p.y - b.y) / b.h : 0.5;
-  return { x: Math.min(1, Math.max(0, fx)), y: Math.min(1, Math.max(0, fy)) };
 }
 
 /** Lado do nó mais próximo de uma âncora fracionária (0..1) — define a direção
@@ -93,6 +86,35 @@ function offsetPolyline(pts: Pt[], d: number): Pt[] {
   return out;
 }
 
+/** Trecho "quase reto": desvio de até 12 px do mapa e inclinação de até ~3,4°.
+ *  Diagonal de propósito (a de AGG → POP, ~35°) passa longe disso. */
+const QUASE_RETA_PX = 12;
+const QUASE_RETA_INCL = 0.06;
+
+/**
+ * Endireita os trechos quase retos da rota. Âncora e waypoint são posicionados
+ * à mão e raramente batem no pixel: a linha que devia descer reta saía 3 px
+ * torta — invisível no zoom do computador, mas no celular, com o mapa maior,
+ * dava pra ver (e no traçado em degrau virava um "dentinho" no fim). Cada
+ * trecho quase vertical/horizontal alinha o ponto seguinte ao anterior; a
+ * origem fica onde está e o destino desliza um pouco pela borda do nó (sem
+ * sair dele). Só na visualização: no modo edição a rota é a salva, pra as
+ * alças baterem com a linha.
+ */
+function endireitar(pts: Pt[], destino: { x: number; y: number; w: number; h: number }): Pt[] {
+  const out = pts.map((p) => ({ ...p }));
+  for (let i = 0; i < out.length - 1; i++) {
+    const a = out[i], b = out[i + 1];
+    const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
+    if (dx > 0 && dx <= QUASE_RETA_PX && dx <= dy * QUASE_RETA_INCL) b.x = a.x;
+    else if (dy > 0 && dy <= QUASE_RETA_PX && dy <= dx * QUASE_RETA_INCL) b.y = a.y;
+  }
+  const fim = out[out.length - 1];
+  fim.x = Math.min(destino.x + destino.w, Math.max(destino.x, fim.x));
+  fim.y = Math.min(destino.y + destino.h, Math.max(destino.y, fim.y));
+  return out;
+}
+
 function ptsToPath(pts: Pt[]): string {
   return pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
 }
@@ -105,7 +127,7 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
   const pal = paletteFor(theme);
   // Modo público fora do editor: o card mostra só tráfego e capacidade
   const publico = !!publicMode && !editMode;
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, getZoom } = useReactFlow();
 
   // Quais cards exibir. Esconder é só visual — antes, a única forma de ocultar
   // um card era apagar o nome da interface, o que levava o cadastro junto.
@@ -142,8 +164,8 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
 
   // Ponto de origem/destino: âncora livre OU flutuante (auto)
   const fp = getEdgeParams(sourceNode, targetNode);
-  const sp: Pt = localSrcA ? anchorToPoint(sourceNode, localSrcA) : { x: fp.sx, y: fp.sy };
-  const tp: Pt = localTgtA ? anchorToPoint(targetNode, localTgtA) : { x: fp.tx, y: fp.ty };
+  const spSalvo: Pt = localSrcA ? anchorToPoint(sourceNode, localSrcA) : { x: fp.sx, y: fp.sy };
+  const tpSalvo: Pt = localTgtA ? anchorToPoint(targetNode, localTgtA) : { x: fp.tx, y: fp.ty };
 
   // Lado real em que cada ponta toca o nó. Para roteamento ortogonal/curvo a
   // linha PRECISA sair perpendicular a esse lado, senão o getSmoothStepPath
@@ -152,8 +174,12 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
   const sourcePos = localSrcA ? anchorSide(localSrcA) : fp.sourcePos;
   const targetPos = localTgtA ? anchorSide(localTgtA) : fp.targetPos;
 
-  const points: Pt[] = [sp, ...localWp, tp];
   const pathType = data?.pathType ?? 'straight';
+  // Curva não tem trecho reto pra endireitar
+  const salvos: Pt[] = [spSalvo, ...localWp, tpSalvo];
+  const points: Pt[] = editMode || pathType === 'curved' ? salvos : endireitar(salvos, nodeBox(targetNode));
+  const sp = points[0];
+  const tp = points[points.length - 1];
 
   let edgePath = '';
   if (pathType === 'curved' && localWp.length === 0) {
@@ -313,9 +339,13 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
   const onEndMove = (e: React.PointerEvent) => {
     if (!dragEnd.current) return;
     const f = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-    const node = dragEnd.current === 'source' ? sourceNode : targetNode;
-    const a = pointToAnchor(node, { x: f.x, y: f.y });
-    if (dragEnd.current === 'source') setLocalSrcA(a); else setLocalTgtA(a);
+    const origem = dragEnd.current === 'source';
+    const node = origem ? sourceNode : targetNode;
+    // Na borda, em qualquer ponto; com ímã pro ponto vizinho da rota (o
+    // primeiro/último waypoint ou a outra ponta) — encaixa a linha reta.
+    const vizinho = origem ? (localWp[0] ?? tp) : (localWp[localWp.length - 1] ?? sp);
+    const a = ancoraNaBorda(caixaDoNo(node), f, vizinho, imaNoZoom(getZoom()));
+    if (origem) setLocalSrcA(a); else setLocalTgtA(a);
   };
   const onEndUp = (e: React.PointerEvent) => {
     if (!dragEnd.current) return;
@@ -398,17 +428,24 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
     <g style={{ opacity: edgeOpacity, transition: 'opacity 0.2s ease-in-out' }}>
       {/* Halo: status down, selecionado, animação glow ou pulse. No pulse é o
           halo que respira: a linha só cai a 75% — a 40%, como era, o link
-          DOWN sumia do fundo metade do tempo (1,7:1). */}
+          DOWN sumia do fundo metade do tempo (1,7:1).
+          Sem filter: blur. No Safari cada halo desfocado virava uma imagem à
+          parte do tamanho da caixa da linha × zoom² × DPR, redesenhada a cada
+          quadro da animação: no iPhone, 10 links down passavam de 50 MB com
+          zoom 0,76 (e o zoom vai a 4) e o Safari matava a aba — a página
+          "reiniciava" ao dar zoom. O desfoque era de 2–4 px do mapa, menos de
+          1 px na tela no zoom de abertura: não fazia falta. */}
       {(status === 'down' || selected || glow || isGlowingSearch || animation === 'pulse') && (
         <path
+          className="fc-halo"
           d={edgePath}
           fill="none"
           stroke={isGlowingSearch ? '#3b82f6' : color}
           strokeWidth={strokeWidth + (glow || isGlowingSearch ? 10 : 6)}
           strokeOpacity={glow || isGlowingSearch ? 0.4 : 0.25}
           strokeLinecap="round"
+          strokeLinejoin="round"
           style={{
-            filter: `blur(${glow || isGlowingSearch ? 4 : 2}px)`,
             animation: (glow || isGlowingSearch) ? 'fc-glow 1.6s ease-in-out infinite'
               : animation === 'pulse' ? 'fc-halo 1.2s ease-in-out infinite' : undefined,
           }}
@@ -458,6 +495,7 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
           return (
             <>
               <path
+                className="fc-duplo"
                 d={pathA}
                 fill="none"
                 stroke={color}
@@ -468,6 +506,7 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
                 style={{ animation: active ? 'fc-flow 1s linear infinite' : undefined, pointerEvents: 'none' }}
               />
               <path
+                className="fc-duplo"
                 d={pathB}
                 fill="none"
                 stroke={color}

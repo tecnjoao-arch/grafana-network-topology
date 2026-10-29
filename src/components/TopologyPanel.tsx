@@ -6,13 +6,13 @@ import { PanelProps } from '@grafana/data';
 import {
   ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, ControlButton, MiniMap,
   useNodesState, useEdgesState, useReactFlow, useStore, getNodesBounds, getViewportForBounds,
-  Node, Edge, NodeChange, Connection, OnConnectStart, CoordinateExtent, Panel,
+  Node, Edge, NodeChange, OnConnectStart, FinalConnectionState, CoordinateExtent, Panel, useNodesInitialized,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import {
   PanelOptions, NetworkTopology, LinkEdgeData, DEFAULT_OPTIONS, LinkStatus,
-  OPTIC_KEYS, OpticKey, MetricBinding, ModuleInfoBindings, ModuleInfo,
+  OPTIC_KEYS, OpticKey, MetricBinding, ModuleInfoBindings, ModuleInfo, LegendItem,
 } from '../types';
 import { DataFrame, LoadingState } from '@grafana/data';
 import { DeviceNode } from './nodes/DeviceNode';
@@ -21,6 +21,10 @@ import { LinkTooltip } from './LinkTooltip';
 import { LinkDetailsModal } from './LinkDetailsModal';
 import { ProtecaoModal } from './ProtecaoModal';
 import { useSemBarraHorizontal } from './useSemBarraHorizontal';
+import { useMapaAteOFim } from './useMapaAteOFim';
+import { ehIOS, useModoLeve } from './useModoLeve';
+import { useDiagnosticoZoom } from './useDiagnosticoZoom';
+import { ancoraNaBorda, caixaDoNo, imaNoZoom, pontoDaAncora } from '../utils/ancora';
 import { limparParaPublicacao } from '../utils/publicacao';
 import { NetworkTestModal } from './NetworkTestModal';
 import { EdgeEditor } from './EdgeEditor';
@@ -194,6 +198,14 @@ const floatBtn = (pal: Palette): React.CSSProperties => ({
   boxShadow: `0 4px 12px ${pal.shadow}`,
 });
 
+/** iPhone/iPad: as linhas numa camada só (.fc-ios no CSS acima). O React Flow
+ *  desenha cada link num <svg> à parte, do tamanho da linha inteira; no
+ *  Safari isso ia ao limite de memória e o zoom às vezes derrubava a página
+ *  (no iPhone com iOS 18.7, 4 de 6 rodadas com as linhas normais caíram no
+ *  zoom 0,46; as 2 com as linhas numa camada só aguentaram até 4× — ver
+ *  useDiagnosticoZoom, ?diag=confirma). */
+const IOS = ehIOS();
+
 const nodeTypes = { device: DeviceNode };
 const edgeTypes = { link: LinkEdge };
 
@@ -216,6 +228,18 @@ const ANIMATION_CSS = `
   0%, 100% { stroke-opacity: 0.2; }
   50% { stroke-opacity: 0.6; }
 }
+.fc-sem-sombra * { box-shadow: none !important; }
+.fc-ios .react-flow__edges { will-change: transform; }
+.fc-ios.fc-diag-sem-correcao .react-flow__edges { will-change: auto; }
+.fc-esconde-linhas .react-flow__edges { display: none; }
+.fc-esconde-cards .react-flow__edgelabel-renderer { display: none; }
+.fc-esconde-nos .react-flow__nodes { display: none; }
+.fc-esconde-fundo .react-flow__background { display: none; }
+.fc-diag-camada-mapa .react-flow__viewport { will-change: transform; }
+.fc-diag-camada-linhas .react-flow__edges { will-change: transform; }
+.fc-diag-sem-clique .react-flow__edge-interaction { display: none; }
+.fc-diag-sem-halo .fc-halo { display: none; }
+.fc-diag-sem-duplo .fc-duplo { display: none; }
 `;
 
 type Props = PanelProps<PanelOptions>;
@@ -246,8 +270,12 @@ export const TopologyPanel: React.FC<Props> = (props) => {
   // Dashboard público: some a barra horizontal falsa do Grafana (ver o hook)
   const raiz = useRef<HTMLDivElement>(null);
   useSemBarraHorizontal(raiz);
+  // ...e com autofitpanels o mapa vai até o fim da tela (ver o hook)
+  useMapaAteOFim(raiz);
   // Fundo e barra lateral no mesmo tema do mapa (fixado, ou o do Grafana)
   const tema = temaEfetivo(options.theme, useTheme2().isDark);
+  // A opção "Animar links" e os interruptores de diagnóstico da URL (ver o hook)
+  const leve = useModoLeve(options.animateLinks);
 
   // Aplica o limite de obsolescência configurado antes de resolver os bindings.
   setStaleThresholdMs((options.staleThresholdSec ?? DEFAULT_OPTIONS.staleThresholdSec) * 1000);
@@ -257,7 +285,7 @@ export const TopologyPanel: React.FC<Props> = (props) => {
   const series = data?.series ?? [];
 
   const [showIp, setShowIp] = useState(false);
-  const [hideTrafficCards, setHideTrafficCards] = useState(false);
+  const [hideTrafficCards, setHideTrafficCards] = useState(leve.semCards);
   const [searchQuery, setSearchQuery] = useState('');
   // Modal de testes de rede (Globalping): null = fechado; string = alvo inicial
   const [testTarget, setTestTarget] = useState<string | null>(null);
@@ -600,7 +628,8 @@ export const TopologyPanel: React.FC<Props> = (props) => {
         searchQuery: searchQuery,
         hideTrafficBox: hideTrafficCards,
         color: edgeColor,
-        animation: edgeAnim,
+        // 'none' explícito: sem valor, o LinkEdge escolhe fluxo/pulso pelo status
+        animation: leve.semAnimacao ? 'none' : edgeAnim,
         lineStyle: edgeLineStyle,
         status: edgeStatus,
         // Causa do status: vira texto no card/tooltip/modal, pra distinguir
@@ -623,12 +652,13 @@ export const TopologyPanel: React.FC<Props> = (props) => {
     }),
     [topology, series, showIp, searchQuery, hideTrafficCards, options.fontScale, options.cardScale, nodeLive,
       options.dimLinksOnNodeDown, noData, nodeLabels, damp,
-      options.downColor, options.downLineStyle, options.downAnimation]
+      options.downColor, options.downLineStyle, options.downAnimation, leve.semAnimacao]
   );
 
   return (
     <div
       ref={raiz}
+      className={leve.semSombra ? 'fc-sem-sombra' : undefined}
       style={{
         width, height,
         background: paletteFor(tema).canvas,
@@ -748,6 +778,9 @@ const TopologyInner: React.FC<InnerProps> = ({
   const [limite, setLimite] = useState<CoordinateExtent | undefined>(undefined);
   // A dica "arraste para os lados" some no primeiro arraste
   const [arrastou, setArrastou] = useState(false);
+  // O usuário mexeu no zoom ou arrastou o mapa: o reajuste automático não
+  // desfaz isso (ver o efeito de re-fit). O botão ⛶ zera.
+  const interagiu = useRef(false);
   const fitToContent = useCallback((duration = 300) => {
     const ns = nodesRef.current;
     if (!ns.length) return;
@@ -793,18 +826,11 @@ const TopologyInner: React.FC<InnerProps> = ({
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
 
-  // Tracking do mouse para âncoras exatas
-  const lastMousePos = useRef<{ x: number; y: number } | null>(null);
+  // Onde o arraste do link novo começou (a ponta de origem sai dali)
   const startMousePos = useRef<{ x: number; y: number } | null>(null);
   // True enquanto um nó está sendo arrastado — usado para não resetar a posição
   // no meio do arraste quando chega um refresh de dados do Grafana.
   const draggingRef = useRef(false);
-
-  useEffect(() => {
-    const handleMove = (e: MouseEvent) => { lastMousePos.current = { x: e.clientX, y: e.clientY }; };
-    window.addEventListener('mousemove', handleMove);
-    return () => window.removeEventListener('mousemove', handleMove);
-  }, []);
 
   const clipboard = useRef<Array<{ data: any; width?: number; height?: number; position?: { x: number; y: number } }>>([]);
 
@@ -1011,7 +1037,7 @@ const TopologyInner: React.FC<InnerProps> = ({
     setEditingNodeId(id);
   }, [topology, options, onOptionsChange]);
 
-  const { screenToFlowPosition, getNode } = useReactFlow();
+  const { screenToFlowPosition, getNode, getInternalNode, getZoom } = useReactFlow();
 
   const handleConnectStart = useCallback<OnConnectStart>((event) => {
     if ('clientX' in event) {
@@ -1021,55 +1047,65 @@ const TopologyInner: React.FC<InnerProps> = ({
     }
   }, []);
 
-  const handleConnect = useCallback((connection: Connection) => {
-    if (!onOptionsChange || !connection.source || !connection.target) return;
-    
-    let sPos = startMousePos.current ? screenToFlowPosition(startMousePos.current) : null;
-    let tPos = lastMousePos.current ? screenToFlowPosition(lastMousePos.current) : null;
+  // Link novo: sai de um dos 4 pontos de conexão e pode ser SOLTO EM QUALQUER
+  // PONTO do outro nó — a ponta vai pra borda mais perto de onde soltou (ver
+  // utils/ancora). Antes só conectava perto dos 4 pontos (o React Flow puxava
+  // a linha pro mais próximo, daí os pulos) e a ponta ficava onde o mouse
+  // estava, raramente alinhada: a linha nascia 2–3 px torta. Agora, perto de
+  // ficar reta com a origem, ela encaixa.
+  const handleConnectEnd = useCallback((event: MouseEvent | TouchEvent, conn: FinalConnectionState) => {
+    if (!onOptionsChange || !conn.fromNode) return;
+    const toque = 'changedTouches' in event ? event.changedTouches[0] : undefined;
+    const solta = toque ? { x: toque.clientX, y: toque.clientY } : { x: (event as MouseEvent).clientX, y: (event as MouseEvent).clientY };
+    // Em cima de um ponto de conexão o React Flow já diz o nó; no corpo do nó, pelo elemento
+    const idDestino = conn.toNode?.id
+      ?? (document.elementFromPoint(solta.x, solta.y)?.closest('.react-flow__node') as HTMLElement | null)?.dataset.id;
+    if (!idDestino || idDestino === conn.fromNode.id) return;
+    const origem = getInternalNode(conn.fromNode.id);
+    const destino = getInternalNode(idDestino);
+    if (!origem || !destino) return;
 
-    const sNode = getNode(connection.source);
-    const tNode = getNode(connection.target);
-
-    const getAnchor = (node: any, pos: {x: number, y: number} | null, handleId?: string | null) => {
-      let x = 0.5, y = 0.5;
-      if (node && pos) {
-        const nx = node.internals?.positionAbsolute?.x ?? node.position.x;
-        const ny = node.internals?.positionAbsolute?.y ?? node.position.y;
-        const nw = node.measured?.width ?? 64;
-        const nh = node.measured?.height ?? 64;
-        x = Math.max(0, Math.min(1, (pos.x - nx) / nw));
-        y = Math.max(0, Math.min(1, (pos.y - ny) / nh));
-      }
-      if (handleId === 'top') y = 0;
-      else if (handleId === 'bottom') y = 1;
-      else if (handleId === 'left') x = 0;
-      else if (handleId === 'right') x = 1;
-      
-      return { x, y };
-    };
+    const ima = imaNoZoom(getZoom());
+    const cOrigem = caixaDoNo(origem);
+    const cDestino = caixaDoNo(destino);
+    const inicio = startMousePos.current ? screenToFlowPosition(startMousePos.current) : conn.from;
+    const fim = screenToFlowPosition(solta);
+    const sourceAnchor = ancoraNaBorda(cOrigem, inicio ?? fim, undefined, ima);
+    const targetAnchor = ancoraNaBorda(cDestino, fim, pontoDaAncora(cOrigem, sourceAnchor), ima);
 
     const newEdge = {
       id: genId('edge'),
-      source: connection.source,
-      target: connection.target,
-      data: {
-        sourceAnchor: getAnchor(sNode, sPos, connection.sourceHandle),
-        targetAnchor: getAnchor(tNode, tPos, connection.targetHandle),
-      },
+      source: conn.fromNode.id,
+      target: idDestino,
+      data: { sourceAnchor, targetAnchor },
     };
     onOptionsChange({
       ...options,
       topology: { ...topology, edges: [...topology.edges, newEdge] },
     });
-  }, [topology, options, onOptionsChange, getNode, screenToFlowPosition]);
+  }, [topology, options, onOptionsChange, getInternalNode, getZoom, screenToFlowPosition]);
 
-  // Re-fit ao redimensionar (importante pra TV)
+  // Re-fit ao redimensionar (importante pra TV) e quando os nós terminam de ser
+  // medidos. Sem esperar a medição, o fitView do próprio React Flow rodava
+  // DEPOIS deste e desfazia o "preencher a altura" do celular.
+  const nosMedidos = useNodesInitialized();
+  // ?diag=auto: o mapa dá zoom sozinho escondendo uma parte por rodada (ver o hook)
+  const diag = useDiagnosticoZoom(nosMedidos);
+  const ultimaLargura = useRef(width);
   useEffect(() => {
-    if (options.fitView && !editMode) {
-      const t = setTimeout(() => fitToContent(300), 80);
-      return () => clearTimeout(t);
-    }
-  }, [width, height, options.fitView, editMode, fitToContent]);
+    if (!options.fitView || editMode || !nosMedidos) return;
+    // Depois de um zoom ou arraste do usuário, mudança só de ALTURA não refaz o
+    // ajuste: no celular a barra do navegador some e aparece a cada toque, a
+    // tela muda ~56 px e o reajuste jogava o zoom fora ("reinicia tudo").
+    // Largura mudando de verdade (girou o celular, janela redimensionada) e o
+    // botão ⛶ continuam reajustando.
+    const mudouLargura = Math.abs(width - ultimaLargura.current) > width * 0.1;
+    ultimaLargura.current = width;
+    if (interagiu.current && !mudouLargura) return;
+    interagiu.current = false;
+    const t = setTimeout(() => fitToContent(300), 80);
+    return () => clearTimeout(t);
+  }, [width, height, options.fitView, editMode, fitToContent, nosMedidos]);
 
   // Em modo edição: salva as posições quando o usuário termina de arrastar
   // (ou move com as setas). A mudança de fim de arraste já traz a posição
@@ -1199,6 +1235,7 @@ const TopologyInner: React.FC<InnerProps> = ({
         fitView={options.fitView && !editMode}
         fitViewOptions={{ padding: 0.1 }}
         proOptions={{ hideAttribution: true }}
+        className={[...(IOS ? ['fc-ios'] : []), ...diag.classes].join(' ') || undefined}
         nodesDraggable={!!editMode}
         nodesConnectable={!!editMode}
         elementsSelectable={true}
@@ -1206,9 +1243,15 @@ const TopologyInner: React.FC<InnerProps> = ({
         // com o cadeado — o mapa preenche a altura e o resto fica dos lados.
         panOnDrag={editMode || !locked || !!limite}
         translateExtent={limite}
-        onMoveStart={(ev) => { if (ev && limite) setArrastou(true); }}
+        onMoveStart={(ev) => {
+          if (!ev) return; // movimento do próprio código (ajuste, botões)
+          interagiu.current = true;
+          if (limite) setArrastou(true);
+        }}
         zoomOnScroll={editMode || !locked}
-        zoomOnPinch={editMode || !locked}
+        // Celular em pé: a pinça também é do mapa. Travada, ela ia pro Safari,
+        // que dava zoom na página inteira em vez do mapa.
+        zoomOnPinch={editMode || !locked || !!limite}
         zoomOnDoubleClick={editMode || !locked}
         // Travado, a roda (e o arrastar no celular) rola a PÁGINA; o padrão do
         // React Flow engolia o scroll em cima do mapa.
@@ -1221,7 +1264,10 @@ const TopologyInner: React.FC<InnerProps> = ({
         onNodeClick={onNodeClick}
         onNodeContextMenu={onNodeContextMenu}
         onConnectStart={handleConnectStart}
-        onConnect={handleConnect}
+        onConnectEnd={handleConnectEnd}
+        // Sem puxar a linha pro ponto de conexão mais próximo (os "pulos"):
+        // o link é solto em qualquer ponto do nó (handleConnectEnd)
+        connectionRadius={0}
         snapToGrid={!!editMode}
         snapGrid={[15, 15]}
         // Botões de zoom na paleta do tema. Pelas variáveis, não pelo
@@ -1235,6 +1281,20 @@ const TopologyInner: React.FC<InnerProps> = ({
         } as React.CSSProperties}
       >
         <Background variant={BackgroundVariant.Lines} color={pal.grid} gap={editMode ? 15 : 30} />
+        {diag.ativo && (
+          // Abaixo da dica "arraste para os lados" (topo, no meio), que cobria a caixa no celular
+          <Panel position="top-left" style={{ marginTop: 48 }}>
+            <div style={{
+              background: pal.surface, color: pal.text, border: `1px solid ${pal.border}`, borderRadius: 6,
+              padding: '6px 8px', fontSize: 11, lineHeight: 1.5, maxWidth: 300, boxShadow: `0 2px 8px ${pal.shadow}`,
+            }}>
+              {diag.linhas.map((l, i) => <div key={i} style={{ fontWeight: i === 0 ? 700 : 400 }}>{l}</div>)}
+              <button onClick={diag.recomecar} style={{ marginTop: 6, fontSize: 11, padding: '2px 8px', cursor: 'pointer' }}>
+                recomeçar o teste
+              </button>
+            </div>
+          </Panel>
+        )}
         {/* Celular em pé: sem a dica, ninguém descobre que o resto do mapa
             está dos lados. Some no primeiro arraste. */}
         {limite && !arrastou && (
@@ -1250,8 +1310,13 @@ const TopologyInner: React.FC<InnerProps> = ({
         )}
         {/* Zoom, ajustar e o cadeado — também no modo público: quem olha pela
             internet aproxima um trecho e volta ao mapa inteiro. */}
-        <Controls showInteractive={false} showFitView={false}>
-          <ControlButton onClick={() => fitToContent(300)} title="Ajustar à tela (preencher)">
+        <Controls
+          showInteractive={false}
+          showFitView={false}
+          onZoomIn={() => { interagiu.current = true; }}
+          onZoomOut={() => { interagiu.current = true; }}
+        >
+          <ControlButton onClick={() => { interagiu.current = false; fitToContent(300); }} title="Ajustar à tela (preencher)">
             <span style={{ fontSize: 14, lineHeight: 1 }}>⛶</span>
           </ControlButton>
           {!editMode && (
@@ -1305,7 +1370,7 @@ const TopologyInner: React.FC<InnerProps> = ({
           </div>
         )}
         {options.showLegend && (
-          <Legend pal={pal} downColor={options.downColor ?? DEFAULT_OPTIONS.downColor} />
+          <Legend pal={pal} downColor={options.downColor ?? DEFAULT_OPTIONS.downColor} itens={options.legendItems} />
         )}
       </ReactFlow>
 
@@ -1573,34 +1638,45 @@ const EditModeBanner: React.FC<{ onAddNode: () => void; limpeza?: { resumo: stri
 
 /** As cores são as mesmas que as linhas usam no tema — inclusive o DOWN, que
  *  vem da opção do painel. O cinza entrou: desde que ausência de dado deixou
- *  de virar verde, ele é estado comum no mapa e não tinha explicação. */
-const Legend: React.FC<{ pal: Palette; downColor: string }> = ({ pal, downColor }) => (
-  <div
-    style={{
-      position: 'absolute',
-      bottom: 12,
-      right: 12,
-      background: pal.surface,
-      border: `1px solid ${pal.border}`,
-      borderRadius: 6,
-      padding: '8px 10px',
-      fontSize: 11,
-      color: pal.text,
-      zIndex: 10,
-      pointerEvents: 'none',
-      lineHeight: 1.6,
-      boxShadow: `0 2px 8px ${pal.shadow}`,
-    }}
-  >
-    {([
+ *  de virar verde, ele é estado comum no mapa e não tinha explicação.
+ *  Editada nas opções (itens), cada cor passa pelo mesmo piso de contraste da
+ *  linha de cor fixa/regra: o traço da legenda sai no tom da linha no mapa.
+ *  Item sem texto (ainda sendo digitado) não aparece. */
+const Legend: React.FC<{ pal: Palette; downColor: string; itens?: LegendItem[] }> = ({ pal, downColor, itens }) => {
+  const linhas: Array<[string, string]> = itens
+    ? itens.filter((i) => String(i?.label ?? '').trim())
+      .map((i) => [ensureContrast(i.color, pal.canvas, 3), String(i.label).trim()])
+    : [
       [pal.line.up, 'link OK'],
       [pal.line.warning, 'alto uso / warning'],
       [ensureContrast(downColor, pal.canvas, 3), 'down'],
       [pal.line.unknown, 'sem status'],
-    ] as const).map(([cor, rotulo]) => (
-      <div key={rotulo} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ width: 18, height: 3, background: cor, borderRadius: 1 }} /> {rotulo}
-      </div>
-    ))}
-  </div>
-);
+    ];
+  if (!linhas.length) return null;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        bottom: 12,
+        right: 12,
+        maxWidth: 240,
+        background: pal.surface,
+        border: `1px solid ${pal.border}`,
+        borderRadius: 6,
+        padding: '8px 10px',
+        fontSize: 11,
+        color: pal.text,
+        zIndex: 10,
+        pointerEvents: 'none',
+        lineHeight: 1.6,
+        boxShadow: `0 2px 8px ${pal.shadow}`,
+      }}
+    >
+      {linhas.map(([cor, rotulo], i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 18, height: 3, flex: 'none', background: cor, borderRadius: 1 }} /> {rotulo}
+        </div>
+      ))}
+    </div>
+  );
+};
