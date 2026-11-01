@@ -11,6 +11,11 @@
 // fundo do mapa. As paletas abaixo passam por construção; cor escolhida pelo
 // usuário (cor fixa do link, regra de cor, fundo do nó) passa por
 // ensureContrast(), que mantém o matiz e só escurece/clareia o necessário.
+//
+// Os textos das paletas vão além, a ≥ 7:1 (nível AAA) sobre a superfície dos
+// cards: no zoom que enquadra o mapa inteiro, o texto dos cards fica com 6–8 px
+// na tela, e a 4,5:1 (o ↑ azul do escuro, o ↓ verde e o IP do claro) ele
+// passava no mínimo mas lia mal de longe, na TV.
 
 import type { LinkStatus } from '../types';
 
@@ -43,6 +48,10 @@ export interface Palette {
   /** Tráfego: ↓ inbound verde, ↑ outbound azul (texto) */
   inbound: string;
   outbound: string;
+  /** As setas ↓/↑ do card: ícone, não texto — piso de 3:1 (não 7:1) deixa
+   *  usar o tom vivo da cor, o mesmo das linhas */
+  setaIn: string;
+  setaOut: string;
   ip: string;
   /** Potência óptica: identidade Tx/Rx e níveis */
   tx: string;
@@ -60,31 +69,37 @@ const DARK: Palette = {
   grid: 'rgba(255,255,255,0.04)',
   surface: '#0f172a',
   nodeBg: 'rgba(15, 23, 42, 0.85)',
-  nodeBorder: 'transparent',
+  // Sem contorno, a caixa do nó (#0f172a sobre #020617) quase não se
+  // separava do fundo do mapa.
+  nodeBorder: '#1e293b',
   border: '#334155',
   divider: 'rgba(255,255,255,0.1)',
   text: '#f1f5f9',
-  textMuted: '#94a3b8',
+  textMuted: '#a5b4c8',
   shadow: 'rgba(0,0,0,0.4)',
   field: '#1e293b',
   switchOff: '#475569',
   line: { up: '#22c55e', warning: '#f59e0b', down: '#ef4444', unknown: '#64748b' },
   // unknown e down mais claros que a linha: #64748b em card escuro dava 3,8:1.
-  statusText: { up: '#22c55e', warning: '#f59e0b', down: '#f87171', unknown: '#94a3b8' },
+  statusText: { up: '#22c55e', warning: '#f59e0b', down: '#fca5a5', unknown: '#a5b4c8' },
   inbound: '#22c55e',
-  outbound: '#3b82f6',
+  // O #3b82f6 de antes dava 4,6:1 no card
+  outbound: '#60a5fa',
+  setaIn: '#4ade80',
+  setaOut: '#60a5fa',
   ip: '#22d3ee',
   tx: '#4ade80',
   rx: '#60a5fa',
   warn: '#facc15',
-  alarm: '#f87171',
+  alarm: '#fca5a5',
   ok: '#4ade80',
   minimapMask: 'rgba(2, 6, 23, 0.7)',
 };
 
 const LIGHT: Palette = {
   canvas: '#f8fafc',
-  grid: 'rgba(15,23,42,0.06)',
+  // Mais leve que a 0,06 de antes: a grade competia com as linhas finas
+  grid: 'rgba(15,23,42,0.045)',
   surface: '#ffffff',
   nodeBg: 'rgba(255, 255, 255, 0.92)',
   nodeBorder: '#cbd5e1',
@@ -95,18 +110,22 @@ const LIGHT: Palette = {
   shadow: 'rgba(15,23,42,0.14)',
   field: '#f1f5f9',
   switchOff: '#94a3b8',
-  // Os tons -600/-700 dos mesmos verdes/âmbar/vermelhos: o -500 do escuro
-  // ficava a 2:1 do fundo claro.
+  // Linhas: os tons -600 dos mesmos verdes/âmbar/vermelhos (o -500 do escuro
+  // ficava a 2:1 do fundo claro). Textos: os -800, a ≥ 7:1 no card branco (os
+  // -700 de antes davam 5:1).
   line: { up: '#16a34a', warning: '#d97706', down: '#dc2626', unknown: '#64748b' },
-  statusText: { up: '#15803d', warning: '#b45309', down: '#b91c1c', unknown: '#475569' },
-  inbound: '#15803d',
-  outbound: '#1d4ed8',
-  ip: '#0e7490',
-  tx: '#15803d',
-  rx: '#1d4ed8',
-  warn: '#b45309',
-  alarm: '#b91c1c',
-  ok: '#15803d',
+  statusText: { up: '#166534', warning: '#92400e', down: '#991b1b', unknown: '#475569' },
+  inbound: '#166534',
+  outbound: '#1e40af',
+  // -600: 3,3:1 e 5,2:1 no card branco
+  setaIn: '#16a34a',
+  setaOut: '#2563eb',
+  ip: '#155e75',
+  tx: '#166534',
+  rx: '#1e40af',
+  warn: '#92400e',
+  alarm: '#991b1b',
+  ok: '#166534',
   minimapMask: 'rgba(226, 232, 240, 0.7)',
 };
 
@@ -265,6 +284,13 @@ export function ensureContrast(color: string, bg: string, min: number): string {
 
   memo.set(key, out);
   return out;
+}
+
+/** A mesma cor com transparência `a` (brilho, sombra). Cor ilegível volta
+ *  como veio. */
+export function withAlpha(color: string, a: number): string {
+  const c = parseColor(color);
+  return c ? `rgba(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)}, ${a})` : color;
 }
 
 /** O fundo efetivo de um elemento translúcido desenhado sobre `base`. */

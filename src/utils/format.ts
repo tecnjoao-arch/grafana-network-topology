@@ -19,6 +19,13 @@ export function formatBitsPerSec(bps?: number): string {
   return `${bps.toFixed(0)} b/s`;
 }
 
+/** Capacidade do link: sem os zeros que não dizem nada ("400 Gb/s", não
+ *  "400.00 Gb/s"; "2.5 Gb/s" fica). No card, era a linha que mais pesava de
+ *  ler sem trazer informação. */
+export function formatCapacidade(bps?: number): string {
+  return formatBitsPerSec(bps).replace(/^(-?\d+)\.(\d*?)0+ /, (_, int, dec) => (dec ? `${int}.${dec} ` : `${int} `));
+}
+
 /** Calcula utilização (0-1) de um link */
 export function linkUtilization(traffic: number | undefined, capacity: number | undefined): number {
   if (!traffic || !capacity || capacity <= 0) return 0;

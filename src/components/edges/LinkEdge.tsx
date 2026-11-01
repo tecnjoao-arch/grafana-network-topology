@@ -7,7 +7,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { EdgeProps, EdgeLabelRenderer, useInternalNode, useReactFlow, getBezierPath, getSmoothStepPath, Position } from '@xyflow/react';
 import { LinkEdgeData, LabelFooter } from '../../types';
-import { formatBitsPerSec, linkUtilization, splitIps, canonicalizeIpv6, shortenIpv6 } from '../../utils/format';
+import { formatBitsPerSec, formatCapacidade, linkUtilization, splitIps, canonicalizeIpv6, shortenIpv6 } from '../../utils/format';
 import { evalOptical, rxThresholds, txThresholds, OpticalLevel } from '../../utils/optics';
 import { getEdgeParams } from '../../utils/floatingEdge';
 import { ancoraNaBorda, caixaDoNo, imaNoZoom } from '../../utils/ancora';
@@ -260,6 +260,12 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
   // Animações de movimento precisam de um padrão tracejado pra serem visíveis
   const needsDash = animation === 'flow' || animation === 'reverse';
   const dashArray = styleDash !== '0' ? styleDash : (needsDash ? '12 9' : '0');
+  // Linha que só é tracejada por causa da animação ganha um trilho contínuo
+  // na mesma cor, mais fraco, por baixo dos traços que andam: sem ele, 43% da
+  // linha era vão e, no zoom do mapa inteiro, o link virava uma faixa clara
+  // listrada. Tracejado escolhido no estilo (dashed/dotted) fica como está.
+  // Sem animação (iPhone, opção desligada) a linha já sai contínua.
+  const TRILHO = 0.5;
 
   const animCss =
     animation === 'flow' ? 'fc-flow 1s linear infinite' :
@@ -494,6 +500,10 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
           const pathB = ptsToPath(offsetPolyline(route, -sep));
           return (
             <>
+              {active && [pathA, pathB].map((d, i) => (
+                <path key={i} className="fc-duplo" d={d} fill="none" stroke={color} strokeOpacity={TRILHO}
+                  strokeWidth={strandW} strokeLinejoin="round" style={{ pointerEvents: 'none' }} />
+              ))}
               <path
                 className="fc-duplo"
                 d={pathA}
@@ -521,15 +531,20 @@ export const LinkEdge: React.FC<Props> = ({ id, source, target, data, selected }
         })()
       ) : (
         // Linha simples
-        <path
-          d={edgePath}
-          fill="none"
-          stroke={color}
-          strokeWidth={strokeWidth}
-          strokeDasharray={dashArray}
-          strokeLinecap={round ? 'round' : 'butt'}
-          style={{ animation: animCss, pointerEvents: 'none' }}
-        />
+        <>
+          {needsDash && styleDash === '0' && (
+            <path d={edgePath} fill="none" stroke={color} strokeOpacity={TRILHO} strokeWidth={strokeWidth} style={{ pointerEvents: 'none' }} />
+          )}
+          <path
+            d={edgePath}
+            fill="none"
+            stroke={color}
+            strokeWidth={strokeWidth}
+            strokeDasharray={dashArray}
+            strokeLinecap={round ? 'round' : 'butt'}
+            style={{ animation: animCss, pointerEvents: 'none' }}
+          />
+        </>
       )}
 
       <EdgeLabelRenderer>
@@ -717,25 +732,35 @@ const IfLabel: React.FC<{
         cursor: draggable ? 'grab' : (onOpenDetails ? 'pointer' : undefined),
         // em (não px): acompanha a opção "Escala da fonte" do painel (TV de NOC),
         // vezes a "Escala dos cards". Setas (↓/↑) no lugar de "In/Out" liberam
-        // espaço → fonte um pouco maior.
-        fontSize: `${0.74 * escala}em`,
+        // espaço → fonte um pouco maior. 0,84 (era 0,74): no zoom que enquadra
+        // o mapa inteiro, o texto do card ficava com 6–8 px na tela.
+        fontSize: `${0.84 * escala}em`,
         color: textColor,
-        fontFamily: 'monospace',
+        // A fonte do Grafana (Inter), com algarismos de largura fixa pros
+        // valores alinharem. A `monospace` do sistema (Consolas no Windows,
+        // Courier no iPhone) tem traço fino e letra baixa: com 6–8 px na tela,
+        // no zoom do mapa inteiro, os números borravam.
+        fontFamily: 'inherit',
+        fontVariantNumeric: 'tabular-nums',
         // Opaco: com 5% de transparência o fundo claro vazava e derrubava o
         // contraste do texto do card no tema claro.
         background: pal.surface,
-        padding: '0.35em 0.65em',
+        // Lateral mais justa que a 0,65 de antes: com a fonte maior, os cards
+        // que já ficavam lado a lado começavam a se encostar.
+        padding: '0.3em 0.45em',
         borderRadius: 4,
         pointerEvents: 'all', // Permitir clique
         whiteSpace: 'nowrap',
         fontWeight: 600,
-        border: `1px solid ${color}`,
+        // 1,5 px do mapa (era 1): no zoom do mapa inteiro, 1 px virava menos de
+        // meio pixel na tela e a cor do link quase não aparecia na borda.
+        border: `1.5px solid ${color}`,
         zIndex: 8,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         boxShadow: `0 2px 6px ${pal.shadow}`,
-        lineHeight: 1.1,
+        lineHeight: 1.15,
       }}
     >
       {/* Sem título no modo público: o nome da interface fica fora da página */}
@@ -775,15 +800,19 @@ const IfLabel: React.FC<{
           ...(text || ip ? { borderTop: `1px solid ${pal.divider}`, marginTop: 3, paddingTop: 3 } : {}),
           display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.95em', width: '100%',
         }}>
-          <div style={{ color: pal.inbound, display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-            <span style={{ fontWeight: 700 }}>↓</span> <span>{formatBitsPerSec(tx)}</span>
+          {/* Só a seta na cor do sentido (↓ verde, ↑ azul), no tom vivo; o
+              número na cor do texto, a 16–18:1 do card. Pintado de verde/azul,
+              o número ficava a 7–9:1 — e em letra miúda é o contraste que
+              decide a leitura. */}
+          <div style={{ color: pal.text, display: 'flex', justifyContent: 'space-between', gap: 6, fontWeight: 700 }}>
+            <span style={{ color: pal.setaIn }}>↓</span> <span>{formatBitsPerSec(tx)}</span>
           </div>
-          <div style={{ color: pal.outbound, display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-            <span style={{ fontWeight: 700 }}>↑</span> <span>{formatBitsPerSec(rx)}</span>
+          <div style={{ color: pal.text, display: 'flex', justifyContent: 'space-between', gap: 6, fontWeight: 700 }}>
+            <span style={{ color: pal.setaOut }}>↑</span> <span>{formatBitsPerSec(rx)}</span>
           </div>
           {(footer === 'speed' || footer === 'both') && speed !== undefined && (
             <div style={{ color: pal.textMuted, fontSize: '0.88em', borderTop: `1px dashed ${pal.divider}`, marginTop: 2, paddingTop: 2, textAlign: 'center' }}>
-              {formatBitsPerSec(speed)}
+              {formatCapacidade(speed)}
             </div>
           )}
           {(footer === 'fiber' || footer === 'both') && (domTx !== undefined || domRx !== undefined) && (

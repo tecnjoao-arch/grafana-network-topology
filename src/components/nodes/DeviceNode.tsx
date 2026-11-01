@@ -7,7 +7,7 @@ import { DeviceNodeData } from '../../types';
 import { getDeviceIcon } from '../../icons';
 import { useEditor } from '../EditorContext';
 import { useCopiado } from '../useCopiado';
-import { paletteFor, effectiveBg, readableOn, ensureContrast } from '../../utils/theme';
+import { paletteFor, effectiveBg, readableOn, ensureContrast, withAlpha } from '../../utils/theme';
 
 interface Props extends NodeProps {
   data: DeviceNodeData;
@@ -91,11 +91,15 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
   const fade = hasSearch && !matchesSearch;
   const nodeOpacity = fade ? 0.2 : 1;
 
-  const borderColor =
-    selected ? '#3b82f6' :
-    status === 'down' ? pal.line.down :
-    status === 'warning' ? pal.line.warning :
-    pal.nodeBorder;
+  // LED: o contorno na cor do status, com um brilho em volta — junto com o
+  // ponto no ícone, o estado do equipamento se lê de longe. Antes só o DOWN e
+  // o alerta pintavam o contorno; no ar, o nó não tinha cor nenhuma. Sem
+  // status (nó de fundo, rótulo, nó sem coleta) fica o contorno neutro.
+  const led = status === 'up' || status === 'warning' || status === 'down' ? pal.line[status as 'up' | 'warning' | 'down'] : undefined;
+  const borderColor = selected ? '#3b82f6' : led ?? pal.nodeBorder;
+  const brilho = led
+    ? `0 0 ${status === 'down' ? 14 : 10}px ${withAlpha(led, status === 'down' ? 0.65 : 0.45)}, 0 2px 8px ${pal.shadow}`
+    : `0 2px 8px ${pal.shadow}`;
 
   return (
     <div
@@ -115,7 +119,7 @@ export const DeviceNode: React.FC<Props> = ({ id, data, selected }) => {
         borderRadius: borderRadius ?? 8,
         background: bgColor ?? pal.nodeBg,
         border: `2px solid ${borderColor}`,
-        boxShadow: status === 'down' ? '0 0 12px rgba(239,68,68,0.6)' : `0 2px 8px ${pal.shadow}`,
+        boxShadow: brilho,
         minWidth: effWidth ?? 90,
         width: effWidth ? '100%' : 'auto',
         minHeight: effHeight,

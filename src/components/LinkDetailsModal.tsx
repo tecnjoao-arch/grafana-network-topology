@@ -15,7 +15,7 @@ import { DataFrame, DataQueryRequest } from '@grafana/data';
 import { useTheme2 } from '@grafana/ui';
 import { css } from '@emotion/css';
 import { LinkEdgeData, LinkStatus, MetricBinding, ModuleInfo, OpticKey } from '../types';
-import { formatBitsPerSec, linkUtilization, niceCeil, niceStep, fmtAxisBps, splitIps, canonicalizeIpv6 } from '../utils/format';
+import { formatBitsPerSec, formatCapacidade, linkUtilization, niceCeil, niceStep, fmtAxisBps, splitIps, canonicalizeIpv6 } from '../utils/format';
 import { resolveBindingSeries, resolveBindingDetailed, resolveBindingIdentity, BindingSeries } from '../utils/dataBinding';
 import { evalOptical, rxThresholds, txThresholds, formatRange, OpticalLevel } from '../utils/optics';
 import { BuscaHistorico, CartaoLink } from '../cartao/components/CartaoLink';
@@ -402,7 +402,7 @@ export const LinkDetailsModal: React.FC<Props> = ({
             <StatusBadge status={status} />
             <UtilBadge pct={utilPct} util={util} />
             {data.linkSpeed !== undefined && (
-              <span style={badgeNeutral}>Capacidade {formatBitsPerSec(data.linkSpeed)}</span>
+              <span style={badgeNeutral}>Capacidade {formatCapacidade(data.linkSpeed)}</span>
             )}
           </div>
 
