@@ -451,3 +451,51 @@ export function resolveTextBinding(series: DataFrame[], binding?: MetricBinding)
   idx.results.set(cacheKey, out);
   return out;
 }
+
+/** Uma série que um binding usa, com o host e o item como o Zabbix os rotula. */
+export interface SerieUsada {
+  /** Identificador único dentro dos dados (consulta + nome) */
+  id: string;
+  refId: string;
+  host?: string;
+  item?: string;
+}
+
+/** As séries de que um binding depende — para montar o filtro exato da
+ *  consulta. Mesma ordem e mesmo casamento dos resolvedores: a primeira que
+ *  casa E tem valor é a usada; as que casam antes dela sem valor nenhum
+ *  entram também, porque o resolvedor passa por elas (e, tirá-las, mudaria
+ *  qual série vem primeiro). Binding numérico olha os campos numéricos; só
+ *  quando nenhum casa (IP, modelo do módulo) vale o campo de texto. */
+export function seriesDoBinding(series: DataFrame[], binding?: MetricBinding): SerieUsada[] {
+  if (!binding || !binding.match || series.length === 0) return [];
+  const idx = getIndex(series);
+  const cacheKey = `u|${binding.query ?? ''}|${binding.match}`;
+  if (idx.results.has(cacheKey)) return idx.results.get(cacheKey) as SerieUsada[];
+
+  const matches = makeMatcher(binding.match);
+  const temValor = (f: IndexedField) => {
+    const vals = f.field.values as unknown as any[];
+    for (let i = vals.length - 1; i >= 0; i--) {
+      if (f.isNumber ? !isNaN(toNum(vals[i])) : vals[i] !== null && vals[i] !== undefined && vals[i] !== '') return true;
+    }
+    return false;
+  };
+  const colhe = (numeros: boolean): SerieUsada[] => {
+    const out: SerieUsada[] = [];
+    for (const f of idx.fields) {
+      if (f.isNumber !== numeros) continue;
+      if (binding.query && f.refId !== binding.query) continue;
+      if (!matches(f)) continue;
+      const labels = f.field.labels;
+      out.push({ id: `${f.refId}|${f.hay}`, refId: f.refId, host: labels?.host, item: labels?.item });
+      if (temValor(f)) break;
+    }
+    return out;
+  };
+  let out = colhe(true);
+  if (out.length === 0) out = colhe(false);
+
+  idx.results.set(cacheKey, out);
+  return out;
+}

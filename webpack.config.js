@@ -11,8 +11,16 @@ module.exports = (env, argv) => {
     output: {
       path: path.resolve(__dirname, 'dist'),
       filename: 'module.js',
+      // Editores e janelas saem em arquivos à parte, baixados só quando abrem
+      // (src/components/sobDemanda.tsx). O nome leva o hash do conteúdo: muda
+      // quando o código muda, então o navegador nunca usa um pedaço velho.
+      chunkFilename: '[name].[contenthash:8].js',
+      uniqueName: pkg.name,
       library: { type: 'system' },
-      publicPath: '',
+      // De onde o navegador busca os pedaços: a pasta em que o Grafana serve o
+      // plugin. Relativo (sem barra na frente) para valer também com o
+      // Grafana atrás de um subcaminho.
+      publicPath: `public/plugins/${pkg.name}/`,
       clean: true,
     },
 

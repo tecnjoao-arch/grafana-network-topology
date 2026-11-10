@@ -381,6 +381,10 @@ export interface PanelOptions {
   /** Token do Globalping (opcional): aumenta a cota dos testes de rede.
    *  Atenção: fica visível no JSON do dashboard (risco baixo — só controla cota). */
   globalpingToken?: string;
+  /** O filtro de Host e Item que cada consulta tinha antes do "filtro exato"
+   *  ser aplicado pelo botão — para voltar com um clique (ver
+   *  utils/consultasDoPainel). Ausente = o exato não foi aplicado por aqui. */
+  filtroLargo?: Record<string, { host: string; item: string }>;
   /** Modo público: só tráfego, status (cor da linha) e capacidade. Sem IP,
    *  nome de interface, causa do status, botões, testes de rede, links e
    *  nada que abra ao clicar — pra cópia do mapa que vai pra internet. */

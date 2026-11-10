@@ -18,7 +18,6 @@ import { DataFrame, LoadingState } from '@grafana/data';
 import { DeviceNode } from './nodes/DeviceNode';
 import { LinkEdge } from './edges/LinkEdge';
 import { LinkTooltip } from './LinkTooltip';
-import { LinkDetailsModal } from './LinkDetailsModal';
 import { ProtecaoModal } from './ProtecaoModal';
 import { useSemBarraHorizontal } from './useSemBarraHorizontal';
 import { useMapaAteOFim } from './useMapaAteOFim';
@@ -26,9 +25,7 @@ import { ehIOS, useModoLeve } from './useModoLeve';
 import { useDiagnosticoZoom } from './useDiagnosticoZoom';
 import { ancoraNaBorda, caixaDoNo, imaNoZoom, pontoDaAncora } from '../utils/ancora';
 import { limparParaPublicacao } from '../utils/publicacao';
-import { NetworkTestModal } from './NetworkTestModal';
-import { EdgeEditor } from './EdgeEditor';
-import { NodeEditor } from './NodeEditor';
+import { EdgeEditor, NodeEditor, FiltroExatoModal, LinkDetailsModal, NetworkTestModal } from './sobDemanda';
 import { EditorProvider } from './EditorContext';
 import { LinkEdgeData as LinkData } from '../types';
 import {
@@ -724,7 +721,7 @@ interface InnerProps extends Props {
 }
 
 const TopologyInner: React.FC<InnerProps> = ({
-  initialNodes, initialEdges, topology, options, width, height, onOptionsChange, data, timeRange, onOpenTest, noData, dataHealth, editMode,
+  initialNodes, initialEdges, topology, options, width, height, onOptionsChange, data, timeRange, onOpenTest, noData, dataHealth, editMode, id: panelId,
 }) => {
   const seriesKeys = useMemo(() => listSeriesKeys(data?.series ?? []), [data?.series]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -740,6 +737,7 @@ const TopologyInner: React.FC<InnerProps> = ({
   // Começa travado: a roda do mouse rola a página (não dá zoom) e o mapa fica
   // como o ajuste deixou. O cadeado nos controles destrava.
   const [locked, setLocked] = useState(true);
+  const [filtroAberto, setFiltroAberto] = useState(false);
   // Paleta do tema do painel (o fixado ou, em "Seguir o Grafana", o do
   // Grafana agora): nós e arestas recebem pelo EditorContext
   const tema: PanelTheme = temaEfetivo(options.theme, useTheme2().isDark);
@@ -1336,7 +1334,19 @@ const TopologyInner: React.FC<InnerProps> = ({
             style={{ background: pal.surface, border: `1px solid ${pal.border}` }}
           />
         )}
-        {editMode && <EditModeBanner onAddNode={addNode} limpeza={limpezaPublica} />}
+        {editMode && <EditModeBanner onAddNode={addNode} limpeza={limpezaPublica} onFiltroExato={() => setFiltroAberto(true)} />}
+        {editMode && filtroAberto && (
+          <ProtecaoModal oQue="o filtro exato" onClose={() => setFiltroAberto(false)}>
+            <FiltroExatoModal
+              panelId={panelId}
+              series={data?.series ?? []}
+              topology={topology}
+              filtroLargo={options.filtroLargo}
+              onGuardarLargo={(largo) => onOptionsChange?.({ ...options, filtroLargo: largo })}
+              onClose={() => setFiltroAberto(false)}
+            />
+          </ProtecaoModal>
+        )}
         {/* Sem a tarja, o mapa todo cinza é ambíguo: cinza também significa
             "não configurado", então o plantão leria "mapa mal montado" em vez
             de "estou cego agora" — reações opostas no pior momento. */}
@@ -1584,8 +1594,8 @@ const TopologyInner: React.FC<InnerProps> = ({
 
 /** `limpeza`: só com o modo público ligado e algo a limpar — ver utils/publicacao.
  *  Dois cliques (o segundo confirma), porque apaga configuração. */
-const EditModeBanner: React.FC<{ onAddNode: () => void; limpeza?: { resumo: string; aplicar: () => void } }> = ({
-  onAddNode, limpeza,
+const EditModeBanner: React.FC<{ onAddNode: () => void; onFiltroExato: () => void; limpeza?: { resumo: string; aplicar: () => void } }> = ({
+  onAddNode, onFiltroExato, limpeza,
 }) => {
   const [confirma, setConfirma] = useState(false);
   return (
@@ -1612,6 +1622,13 @@ const EditModeBanner: React.FC<{ onAddNode: () => void; limpeza?: { resumo: stri
     <div>✏️ MODO EDIÇÃO — arraste os nós para reposicionar ou conectar</div>
     <button onClick={onAddNode} style={{ cursor: 'pointer', background: '#0f172a', color: '#f59e0b', border: 'none', padding: '6px 10px', borderRadius: 4, fontWeight: 'bold' }}>
       ➕ Adicionar Equipamento
+    </button>
+    <button
+      onClick={onFiltroExato}
+      title="Mostra o filtro de Host e Item que traz só as séries que o mapa usa"
+      style={{ cursor: 'pointer', background: '#0f172a', color: '#f59e0b', border: 'none', padding: '6px 10px', borderRadius: 4, fontWeight: 'bold', textAlign: 'left' }}
+    >
+      🎯 Filtro exato das consultas
     </button>
     {limpeza && (
       <button
