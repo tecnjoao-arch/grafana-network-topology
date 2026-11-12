@@ -12,8 +12,8 @@
       "small": "img/logo.svg",
       "large": "img/logo.svg"
     },
-    "version": "0.4.5",
-    "updated": "2026-10-31"
+    "version": "0.4.6",
+    "updated": "2026-11-12"
   },
   "dependencies": {
     "grafanaVersion": "10.0.0",
